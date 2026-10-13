@@ -21,7 +21,7 @@ shared/domain.ts      类型、食材行解析、校验、图片魔数、搜索�
 server/src/env.ts     环境变量解析。缺项就拒绝启动
 server/src/db.ts      SQLite 连接和建表
 server/src/repo.ts    菜谱、图片行、会话
-server/src/store.ts   ObjectStore。R2 或本地磁盘
+server/src/store.ts   ObjectStore。OSS（S3 接口）或本地磁盘
 server/src/password.ts
 server/src/limiter.ts 内存计数
 server/src/cookies.ts
@@ -88,7 +88,7 @@ interface ObjectStore {
 }
 ```
 
-`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET` 四项齐全才用 R2（S3 API，endpoint `https://<account>.r2.cloudflarestorage.com`）。缺任意一项则四项都必须缺，此时用 `DATA_DIR/objects`。只填了一部分就拒绝启动，避免以为在用 R2 其实写了磁盘。
+`S3_ENDPOINT`、`S3_REGION`、`S3_ACCESS_KEY_ID`、`S3_SECRET_ACCESS_KEY`、`S3_BUCKET` 五项齐全才用阿里云 OSS（S3 兼容接口）。缺任意一项则五项都必须缺，此时用 `DATA_DIR/objects`。只填了一部分就拒绝启动，避免以为在用 OSS 其实写了磁盘。客户端用虚拟托管，`forcePathStyle: false`。可选的 `S3_PREFIX` 在对象键通过文件名检查之后再加到前面。本地磁盘不加前缀。
 
 对象键是 32 位十六进制加 `.jpg` / `.png` / `.webp`。类型看魔数，不看客户端声明的 MIME。单张最大 2MB，一道菜最多 8 张。删除菜谱时删除这些对象。凭证只留在服务器进程里。浏览器只见到 `/recipes/img/<key>`。
 

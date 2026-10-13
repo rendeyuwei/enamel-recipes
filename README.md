@@ -55,7 +55,7 @@ npm run build
 
 站名只有 `shared/site.ts` 里的 `SITE_NAME`，默认「家常菜本」。改完要重新 `npm run build`，浏览器里的标题和页头才会变。
 
-`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET` 四项都有值时，截图上传到 Cloudflare R2。少一项，进程直接退出。四项都空着时，文件写在 `DATA_DIR/objects`。访问图片一律走 `/recipes/img/<key>`，R2 的访问密钥不会发到浏览器。
+`S3_ENDPOINT`、`S3_REGION`、`S3_ACCESS_KEY_ID`、`S3_SECRET_ACCESS_KEY`、`S3_BUCKET` 五项都有值时，截图上传到阿里云 OSS（S3 兼容接口）。少一项，进程直接退出。五项都空着时，文件写在 `DATA_DIR/objects`。可选的 `S3_PREFIX` 会加在对象键前面，浏览器仍然只访问 `/recipes/img/<key>`。访问密钥不会发到浏览器。
 
 已登录之后的新建、修改、删除和上传，每个 IP 每分钟最多 30 次。登录失败另有自己的次数限制，不占用这 30 次。
 
