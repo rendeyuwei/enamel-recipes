@@ -65,21 +65,27 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## 5. 从 GitHub Actions 发到 ECS
 
-`.github/workflows/deploy.yml` 只在手动触发时运行。推到 `main` 就自动部署可以以后再加，等下面的主机密钥和重启命令手工成功一次之后。同一次部署不会并行，后一次会等前一次结束。
+`.github/workflows/deploy.yml` 在推送到 `main` 时运行，也可以在 Actions 页面手动触发（`workflow_dispatch`）。同一次部署不会并行：并发组是 `enamel-recipes-deploy`，`cancel-in-progress` 为 false，后一次会等前一次结束。
+
+`test` 先跑 `npm ci`、`npm test`、`npm run typecheck`、`npm run lint`、`npm run build`。`deploy` 依赖 `test`。通过之后，runner 只向主机发送这一条命令：
+
+```bash
+deploy <40位 commit sha>
+```
+
+也就是 `deploy $GITHUB_SHA`。现网账号是 `caiben-deploy`，登录后的强制命令是 `receive-deploy.sh`。这条通道不接受 rsync，也不接受其它远程 shell。工作流不会同步文件，也不会在服务器上执行 `npm` 或 `systemctl`。
 
 仓库里要有四个 secret。不要把私钥或主机公钥写进仓库。
 
 | Secret | 内容 |
 |---|---|
 | `ECS_HOST` | ECS 的主机名或 IP |
-| `ECS_USER` | 能写 `/opt/caiben` 并执行 `sudo systemctl restart caiben` 的用户 |
+| `ECS_USER` | 部署账号。现网是 `caiben-deploy` |
 | `ECS_SSH_KEY` | 这个用户的私钥 |
 | `ECS_KNOWN_HOSTS` | 你在自己的机器上核对过指纹之后，`ssh-keyscan -H <主机>` 的输出 |
 
-工作流用 `StrictHostKeyChecking=yes` 和这份 `known_hosts`。主机密钥对不上就停止，不会在第一次连接时自动信任。
+工作流把 `ECS_KNOWN_HOSTS` 写成 `known_hosts`，用 `-i` 私钥和 `StrictHostKeyChecking=yes` 连接。主机密钥对不上就停止，不会在第一次连接时自动信任。
 
-工作流先在 runner 上跑测试和构建，再 `rsync` 到 `/opt/caiben`。它排除 `node_modules`、`data` 和 `.env`，所以服务器上的数据库、图片和密钥不会被覆盖。同步之后在服务器上执行 `npm ci`、`npm run build` 和 `sudo systemctl restart caiben`。
-
-`ECS_USER` 需要免密码 sudo 来重启这一个服务，或者把单元改成该用户自己能重启的用户级服务。
+SSH 成功之后，工作流请求 `https://rende.fun/recipes/api/health`，响应正文必须是 `{"ok":true}`。
 
 数据库文件在 `DATA_DIR/caiben.sqlite`。要备份时停写或直接复制这个文件和 WAL。OSS 上的对象随菜谱删除。还没保存进菜谱的上传，超过 24 小时会在下次启动时清掉。

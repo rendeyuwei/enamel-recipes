@@ -23,6 +23,15 @@ body {
   min-height: 100vh;
 }
 
+/* Keep the shell inside the visual viewport. iOS Safari otherwise lets a
+   grid/flex min-content width widen the scrollport, and the header (sized to
+   the viewport) stops short so the page background shows as a right gutter. */
+html, body, #root {
+  max-width: 100%;
+}
+
+#root { min-width: 0; }
+
 .disp {
   font-family: "ZCOOL QingKe HuangYou", "Noto Sans CJK SC", sans-serif;
   font-weight: 400;
@@ -45,9 +54,11 @@ header {
   padding: 18px clamp(16px, 4vw, 48px);
   border-bottom: 4px solid var(--cobalt);
   background: var(--enamel);
+  min-width: 0;
+  max-width: 100%;
 }
 
-.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; min-width: 0; }
 
 .badge {
   width: 46px;
@@ -66,6 +77,10 @@ header {
 
 .brand small {
   display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 11px;
   letter-spacing: 0.2em;
   color: var(--cobalt);
@@ -73,7 +88,7 @@ header {
   margin-top: -6px;
 }
 
-.who { font-size: 14px; display: flex; gap: 10px; align-items: center; }
+.who { font-size: 14px; display: flex; gap: 10px; align-items: center; flex: none; }
 
 .btn {
   display: inline-flex;
@@ -95,9 +110,11 @@ header {
 
 .btn:disabled { opacity: 0.6; cursor: wait; }
 
-main { max-width: 1240px; margin: 0 auto; padding: clamp(20px, 4vw, 48px); }
+main { max-width: min(1240px, 100%); margin: 0 auto; padding: clamp(20px, 4vw, 48px); min-width: 0; }
 
-.listwrap { display: grid; grid-template-columns: 300px 1fr; gap: 48px; }
+.listwrap { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 48px; min-width: 0; max-width: 100%; }
+
+.listwrap > * { min-width: 0; }
 
 .side { position: sticky; top: var(--rf-h, 0px); align-self: start; }
 
@@ -110,13 +127,17 @@ main { max-width: 1240px; margin: 0 auto; padding: clamp(20px, 4vw, 48px); }
 .search {
   overflow: hidden;
   display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   border: 2px solid var(--cobalt);
   background: var(--enamel);
   border-radius: var(--r);
 }
 
 .search input {
-  flex: 1;
+  flex: 1 1 0%;
+  width: 0;
   border: 0;
   background: none;
   padding: 12px;
@@ -136,7 +157,7 @@ main { max-width: 1240px; margin: 0 auto; padding: clamp(20px, 4vw, 48px); }
 
 .tally { margin-top: 18px; font-size: 13px; color: var(--cobalt); }
 
-.plates { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 28px; align-content: start; }
+.plates { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 28px; align-content: start; min-width: 0; max-width: 100%; }
 
 .plate {
   text-decoration: none;
@@ -147,6 +168,8 @@ main { max-width: 1240px; margin: 0 auto; padding: clamp(20px, 4vw, 48px); }
   position: relative;
   box-shadow: 3px 3px 0 rgba(42, 71, 133, 0.85);
   transition: transform 0.15s;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .plate:hover { transform: translate(-2px, -2px); }
@@ -202,7 +225,7 @@ main { max-width: 1240px; margin: 0 auto; padding: clamp(20px, 4vw, 48px); }
 
 .dhead .meta { font-size: 13px; color: #4a5578; margin-top: 6px; }
 
-.dgrid { display: grid; grid-template-columns: 340px 1fr; gap: 40px; align-items: start; }
+.dgrid { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 40px; align-items: start; min-width: 0; }
 
 .card {
   background: var(--enamel);
@@ -210,6 +233,8 @@ main { max-width: 1240px; margin: 0 auto; padding: clamp(20px, 4vw, 48px); }
   border-radius: var(--r);
   padding: 24px;
   box-shadow: 3px 3px 0 rgba(42, 71, 133, 0.85);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .card h2 {
@@ -233,7 +258,7 @@ main { max-width: 1240px; margin: 0 auto; padding: clamp(20px, 4vw, 48px); }
 
 .step {
   display: grid;
-  grid-template-columns: 56px 1fr;
+  grid-template-columns: 56px minmax(0, 1fr);
   gap: 16px;
   padding: 18px 0;
   border-bottom: 2px dotted var(--line);
@@ -269,7 +294,7 @@ button.shot {
 
 button.shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-.formgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.formgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; min-width: 0; }
 
 .f label { display: block; font-weight: 700; color: var(--cobalt); margin-bottom: 6px; }
 
@@ -401,7 +426,7 @@ button.shot img { width: 100%; height: 100%; object-fit: cover; display: block; 
 }
 
 .lightbox img {
-  max-width: min(420px, 92vw);
+  max-width: min(420px, 92%);
   max-height: 90vh;
   object-fit: contain;
   border-radius: var(--r);
@@ -414,18 +439,27 @@ button.shot img { width: 100%; height: 100%; object-fit: cover; display: block; 
 }
 
 @media (max-width: 959px) {
-  .listwrap, .dgrid, .formgrid { grid-template-columns: 1fr; gap: 28px; }
+  html, body {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+
+  @supports (overflow: clip) {
+    html, body { overflow-x: clip; }
+  }
+
+  .listwrap, .dgrid, .formgrid { grid-template-columns: minmax(0, 1fr); gap: 28px; }
   .side { position: static; }
   .side h1 { font-size: 52px; }
-  .plates { grid-template-columns: 1fr 1fr; gap: 16px; }
+  .plates { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
   .plate { border-radius: var(--r); padding: 8px; box-shadow: 2px 2px 0 rgba(42, 71, 133, 0.85); }
   .thumb .glyph { font-size: 52px; }
   .plate h3 { font-size: 16px; }
   .brand b { font-size: 24px; }
   .who .label { display: none; }
   button.shot { width: 120px; }
-  .step { grid-template-columns: 44px 1fr; }
-  .uploads { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .step { grid-template-columns: 44px minmax(0, 1fr); }
+  .uploads { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
   .plate p .ingr { display: none; }
   .up .bar span:first-child { display: none; }
   .up .bar { justify-content: flex-end; }
