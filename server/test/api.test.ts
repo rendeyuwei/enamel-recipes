@@ -24,7 +24,7 @@ function env(dataDir: string, extra: Partial<Env> = {}): Env {
     trustProxy: false,
     dataDir,
     port: 3030,
-    r2: null,
+    s3: null,
     ...extra,
   };
 }

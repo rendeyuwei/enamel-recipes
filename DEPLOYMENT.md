@@ -28,7 +28,7 @@ npm run build
 - `COOKIE_SECURE=1`。站点走 HTTPS，cookie 才带 `Secure`。
 - `TRUST_PROXY=1`。否则登录限流看到的全是 Nginx 的地址。
 - `SEED_DEMO=0`，或者删掉这一行。
-- 要用 R2 时，四项都填。`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET`。缺任何一项进程都不会启动。
+- 要用阿里云 OSS 时，五项都填。`S3_ENDPOINT`、`S3_REGION`、`S3_ACCESS_KEY_ID`、`S3_SECRET_ACCESS_KEY`、`S3_BUCKET`。少一项进程不会启动。`S3_ENDPOINT` 填区域域名，不要带 Bucket，例如 `https://oss-cn-hangzhou.aliyuncs.com`。同地域的 ECS 可以用内网域名，例如 `https://oss-cn-hangzhou-internal.aliyuncs.com`。可选的 `S3_PREFIX` 不要以 `/` 或 `\` 开头，已有对象之后不要再改。
 
 `COOKIE_SECURE=0` 只留给本机的 http。
 
@@ -82,4 +82,4 @@ sudo nginx -t && sudo systemctl reload nginx
 
 `ECS_USER` 需要免密码 sudo 来重启这一个服务，或者把单元改成该用户自己能重启的用户级服务。
 
-数据库文件在 `DATA_DIR/caiben.sqlite`。要备份时停写或直接复制这个文件和 WAL。R2 上的对象随菜谱删除。还没保存进菜谱的上传，超过 24 小时会在下次启动时清掉。
+数据库文件在 `DATA_DIR/caiben.sqlite`。要备份时停写或直接复制这个文件和 WAL。OSS 上的对象随菜谱删除。还没保存进菜谱的上传，超过 24 小时会在下次启动时清掉。
