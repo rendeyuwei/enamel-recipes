@@ -1,7 +1,7 @@
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Env, R2Config } from "./env.ts";
+import type { Env, S3Config } from "./env.ts";
 
 export type StoredObject = { body: Buffer; contentType: string };
 
@@ -43,27 +43,35 @@ export class LocalStore implements ObjectStore {
   }
 }
 
-type ObjectBody = { transformToByteArray: () => Promise<Uint8Array> };
-type Sent = {
-  Body?: ObjectBody;
-  ContentType?: string;
-};
+function isMissing(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "name" in err && (err.name === "NoSuchKey" || err.name === "NotFound");
+}
 
-export class R2Store implements ObjectStore {
+class S3Store implements ObjectStore {
   constructor(
-    private cfg: R2Config,
-    private send: (command: PutObjectCommand | GetObjectCommand | DeleteObjectCommand) => Promise<Sent>,
+    private client: S3Client,
+    private cfg: Pick<S3Config, "bucket" | "prefix">,
   ) {}
 
-  async put(key: string, body: Buffer, contentType: string) {
+  private objectKey(key: string) {
     assertObjectKey(key);
-    await this.send(new PutObjectCommand({ Bucket: this.cfg.bucket, Key: key, Body: body, ContentType: contentType }));
+    return this.cfg.prefix + key;
+  }
+
+  async put(key: string, body: Buffer, contentType: string) {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.cfg.bucket,
+        Key: this.objectKey(key),
+        Body: body,
+        ContentType: contentType,
+      }),
+    );
   }
 
   async get(key: string): Promise<StoredObject | null> {
-    assertObjectKey(key);
     try {
-      const out = await this.send(new GetObjectCommand({ Bucket: this.cfg.bucket, Key: key }));
+      const out = await this.client.send(new GetObjectCommand({ Bucket: this.cfg.bucket, Key: this.objectKey(key) }));
       if (!out.Body) return null;
       const bytes = await out.Body.transformToByteArray();
       return { body: Buffer.from(bytes), contentType: out.ContentType ?? "application/octet-stream" };
@@ -74,9 +82,8 @@ export class R2Store implements ObjectStore {
   }
 
   async delete(key: string) {
-    assertObjectKey(key);
     try {
-      await this.send(new DeleteObjectCommand({ Bucket: this.cfg.bucket, Key: key }));
+      await this.client.send(new DeleteObjectCommand({ Bucket: this.cfg.bucket, Key: this.objectKey(key) }));
     } catch (err) {
       if (isMissing(err)) return;
       throw err;
@@ -84,20 +91,13 @@ export class R2Store implements ObjectStore {
   }
 }
 
-function isMissing(err: unknown): boolean {
-  return typeof err === "object" && err !== null && "name" in err && (err.name === "NoSuchKey" || err.name === "NotFound");
-}
-
-export function createR2Store(cfg: R2Config): R2Store {
-  const client = new S3Client({
-    region: "auto",
-    endpoint: `https://${cfg.accountId}.r2.cloudflarestorage.com`,
-    credentials: { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey },
-  });
-  return new R2Store(cfg, (command) => client.send(command) as Promise<Sent>);
-}
-
 export function createObjectStore(env: Env): ObjectStore {
-  if (env.r2) return createR2Store(env.r2);
-  return new LocalStore(path.join(env.dataDir, "objects"));
+  if (!env.s3) return new LocalStore(path.join(env.dataDir, "objects"));
+  const client = new S3Client({
+    region: env.s3.region,
+    endpoint: env.s3.endpoint,
+    forcePathStyle: false,
+    credentials: { accessKeyId: env.s3.accessKeyId, secretAccessKey: env.s3.secretAccessKey },
+  });
+  return new S3Store(client, { bucket: env.s3.bucket, prefix: env.s3.prefix });
 }
