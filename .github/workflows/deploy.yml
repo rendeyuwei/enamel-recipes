@@ -1,0 +1,44 @@
+name: deploy
+
+# 只手动触发。推到 main 就自动部署可以以后再加，等主机密钥和重启命令手工跑通过之后。
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-ecs
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Sync to the ECS host and restart
+        env:
+          SSH_KEY: ${{ secrets.ECS_SSH_KEY }}
+          ECS_HOST: ${{ secrets.ECS_HOST }}
+          ECS_USER: ${{ secrets.ECS_USER }}
+          ECS_KNOWN_HOSTS: ${{ secrets.ECS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id
+          chmod 600 ~/.ssh/id
+          printf '%s\n' "$ECS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          rsync -az --delete \
+            --exclude node_modules \
+            --exclude data \
+            --exclude .env \
+            --exclude .git \
+            -e "ssh -i ~/.ssh/id -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts" \
+            ./ "$ECS_USER@$ECS_HOST:/opt/caiben/"
+          ssh -i ~/.ssh/id -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "$ECS_USER@$ECS_HOST" \
+            'cd /opt/caiben && npm ci && npm run build && sudo systemctl restart caiben'

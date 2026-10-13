@@ -1,0 +1,17 @@
+[Unit]
+Description=家常菜本
+After=network.target
+
+[Service]
+Type=simple
+User=caiben
+WorkingDirectory=/opt/caiben
+EnvironmentFile=/opt/caiben/.env
+ExecStart=/opt/caiben/node_modules/.bin/tsx server/src/index.ts
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

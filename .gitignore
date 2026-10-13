@@ -1,0 +1,10 @@
+node_modules/
+dist/
+client/dist/
+data/
+.env
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+coverage/
