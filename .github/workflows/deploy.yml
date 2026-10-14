@@ -1,15 +1,21 @@
 name: deploy
 
-# 只手动触发。推到 main 就自动部署可以以后再加，等主机密钥和重启命令手工跑通过之后。
+# 推到 main 或手动触发。服务器只接受 caiben-deploy 的强制命令：
+# deploy <40位 sha>。不要 rsync，也不要在远程跑任意 shell。
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: deploy-ecs
+  group: enamel-recipes-deploy
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,26 +25,42 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: npm run typecheck
+      - run: npm run lint
       - run: npm run build
-      - name: Sync to the ECS host and restart
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ask the ECS receiver to deploy this commit
         env:
-          SSH_KEY: ${{ secrets.ECS_SSH_KEY }}
           ECS_HOST: ${{ secrets.ECS_HOST }}
           ECS_USER: ${{ secrets.ECS_USER }}
+          ECS_SSH_KEY: ${{ secrets.ECS_SSH_KEY }}
           ECS_KNOWN_HOSTS: ${{ secrets.ECS_KNOWN_HOSTS }}
         run: |
+          set -euo pipefail
+          if [[ ! "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "GITHUB_SHA must be a 40-character hex commit" >&2
+            exit 1
+          fi
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/id
+          printf '%s\n' "$ECS_SSH_KEY" > ~/.ssh/id
           chmod 600 ~/.ssh/id
           printf '%s\n' "$ECS_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
-          rsync -az --delete \
-            --exclude node_modules \
-            --exclude data \
-            --exclude .env \
-            --exclude .git \
-            -e "ssh -i ~/.ssh/id -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts" \
-            ./ "$ECS_USER@$ECS_HOST:/opt/caiben/"
-          ssh -i ~/.ssh/id -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts \
+          chmod 600 ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id -n -T \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o GlobalKnownHostsFile=/dev/null \
             "$ECS_USER@$ECS_HOST" \
-            'cd /opt/caiben && npm ci && npm run build && sudo systemctl restart caiben'
+            "deploy $GITHUB_SHA"
+      - name: Check public health
+        run: |
+          set -euo pipefail
+          body=$(curl -fsS https://rende.fun/recipes/api/health)
+          test "$body" = '{"ok":true}'
