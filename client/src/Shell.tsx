@@ -23,6 +23,7 @@ export function Shell({ variant, editTo, children }: Props) {
     }
   }
 
+  const signedIn = variant === "form" || session.status === "in";
   let actions: ReactNode = null;
   if (variant === "login") {
     actions = (
@@ -30,29 +31,24 @@ export function Shell({ variant, editTo, children }: Props) {
         先随便看看
       </Link>
     );
-  } else if (variant === "form") {
+  } else if (signedIn) {
     actions = (
       <>
         <span className="label">已登录 · 管理员</span>
+        {variant === "list" && (
+          <Link className="btn fill" to="/new">
+            ＋ 新菜谱
+          </Link>
+        )}
+        {variant === "detail" && editTo && (
+          <Link className="btn" to={editTo}>
+            编辑
+          </Link>
+        )}
         <button className="btn" type="button" onClick={() => void logout()}>
           退出
         </button>
       </>
-    );
-  } else if (session.status === "in" && variant === "list") {
-    actions = (
-      <>
-        <span className="label">已登录 · 管理员</span>
-        <Link className="btn fill" to="/new">
-          ＋ 新菜谱
-        </Link>
-      </>
-    );
-  } else if (session.status === "in" && variant === "detail" && editTo) {
-    actions = (
-      <Link className="btn" to={editTo}>
-        编辑
-      </Link>
     );
   } else if (session.status === "out") {
     const next = variant === "detail" && editTo ? editTo : "/new";
