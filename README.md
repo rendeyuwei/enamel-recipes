@@ -64,15 +64,15 @@ Signed-in creates, updates, deletes, and uploads are limited to 30 requests per 
 
 Pushing to `main`, or running the workflow manually, checks the repo and then deploys that commit. Deploys do not overlap: a later run waits (`cancel-in-progress` is false).
 
-The deploy job does not rsync and does not open a remote shell. It SSHes as `ECS_USER` (the live account is `caiben-deploy`) and runs only:
+`.github/workflows/deploy.yml` runs `npm ci`, `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build`. The deploy job then calls the shared workflow [rendeyuwei/rende-deploy](https://github.com/rendeyuwei/rende-deploy) (`.github/workflows/deploy-project.yml` on `main`) with project id `recipes`. That workflow installs, tests, and builds again, then SSHes as `ECS_USER`. The only remote command is:
 
 ```bash
-deploy <40-character git sha>
+deploy recipes <40-character git sha>
 ```
 
-The account's forced command is `receive-deploy.sh`. After SSH succeeds, the workflow requests `https://rende.fun/recipes/api/health` and requires `{"ok":true}`.
+`ECS_USER` is `rende-deploy`. The forced command is `/usr/local/libexec/rende-deploy/receive-deploy.sh` from that repository. This job does not rsync and does not open a remote shell. After SSH succeeds, it requests `https://rende.fun/recipes/api/health` and requires `{"ok":true}`.
 
-Host setup (Nginx on `/recipes`, systemd, env, secrets) is in [DEPLOYMENT.md](DEPLOYMENT.md).
+`ECS_HOST`, `ECS_USER`, `ECS_SSH_KEY`, and `ECS_KNOWN_HOSTS` are secrets on this repository. Host setup (Nginx on `/recipes`, systemd, env) is in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ---
 
@@ -142,12 +142,12 @@ npm run build
 
 推到 `main`，或在 Actions 里手动触发，都会先检查仓库，再部署这次提交。部署不会并行，后一次会等前一次（`cancel-in-progress` 为 false）。
 
-部署任务不用 rsync，也不打开远程 shell。它用 `ECS_USER`（现网账号是 `caiben-deploy`）SSH 上去，只执行：
+`.github/workflows/deploy.yml` 会跑 `npm ci`、`npm test`、`npm run typecheck`、`npm run lint` 和 `npm run build`。通过之后，部署作业调用共享工作流 [rendeyuwei/rende-deploy](https://github.com/rendeyuwei/rende-deploy) 的 `.github/workflows/deploy-project.yml`（`main`），项目 id 是 `recipes`。那条工作流会再安装、测试并构建一次，然后用 `ECS_USER` SSH 上去。远程只执行：
 
 ```bash
-deploy <40位 git sha>
+deploy recipes <40位 git sha>
 ```
 
-该账号的强制命令是 `receive-deploy.sh`。SSH 成功后，工作流请求 `https://rende.fun/recipes/api/health`，响应必须是 `{"ok":true}`。
+`ECS_USER` 是 `rende-deploy`。强制命令是该仓库里的 `/usr/local/libexec/rende-deploy/receive-deploy.sh`。这个作业不用 rsync，也不打开远程 shell。SSH 成功后，工作流请求 `https://rende.fun/recipes/api/health`，响应必须是 `{"ok":true}`。
 
-主机上的 Nginx（`/recipes`）、systemd、环境变量和 secret 见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+`ECS_HOST`、`ECS_USER`、`ECS_SSH_KEY`、`ECS_KNOWN_HOSTS` 是本仓库的 secret。主机上的 Nginx（`/recipes`）、systemd 和环境变量见 [DEPLOYMENT.md](DEPLOYMENT.md)。

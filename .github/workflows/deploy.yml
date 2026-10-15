@@ -1,7 +1,8 @@
 name: deploy
 
-# 推到 main 或手动触发。服务器只接受 caiben-deploy 的强制命令：
-# deploy <40位 sha>。不要 rsync，也不要在远程跑任意 shell。
+# 推到 main 或手动触发。本仓库先跑检查，再调用 rende-deploy。
+# 共享工作流只发送 deploy recipes <40位 sha>。不要 rsync，也不要在远程跑任意 shell。
+# 调用方的并发组不用 rende-deploy-recipes：被调用的工作流已经占用这个名字，同名会互相等待。
 on:
   push:
     branches: [main]
@@ -31,36 +32,14 @@ jobs:
 
   deploy:
     needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Ask the ECS receiver to deploy this commit
-        env:
-          ECS_HOST: ${{ secrets.ECS_HOST }}
-          ECS_USER: ${{ secrets.ECS_USER }}
-          ECS_SSH_KEY: ${{ secrets.ECS_SSH_KEY }}
-          ECS_KNOWN_HOSTS: ${{ secrets.ECS_KNOWN_HOSTS }}
-        run: |
-          set -euo pipefail
-          if [[ ! "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "GITHUB_SHA must be a 40-character hex commit" >&2
-            exit 1
-          fi
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$ECS_SSH_KEY" > ~/.ssh/id
-          chmod 600 ~/.ssh/id
-          printf '%s\n' "$ECS_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-          ssh -i ~/.ssh/id -n -T \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
-            -o GlobalKnownHostsFile=/dev/null \
-            "$ECS_USER@$ECS_HOST" \
-            "deploy $GITHUB_SHA"
-      - name: Check public health
-        run: |
-          set -euo pipefail
-          body=$(curl -fsS https://rende.fun/recipes/api/health)
-          test "$body" = '{"ok":true}'
+    uses: rendeyuwei/rende-deploy/.github/workflows/deploy-project.yml@main
+    with:
+      project: recipes
+      node_version: "22"
+      health_url: https://rende.fun/recipes/api/health
+      health_body: '{"ok":true}'
+    secrets:
+      ECS_HOST: ${{ secrets.ECS_HOST }}
+      ECS_USER: ${{ secrets.ECS_USER }}
+      ECS_SSH_KEY: ${{ secrets.ECS_SSH_KEY }}
+      ECS_KNOWN_HOSTS: ${{ secrets.ECS_KNOWN_HOSTS }}
