@@ -67,24 +67,24 @@ sudo nginx -t && sudo systemctl reload nginx
 
 `.github/workflows/deploy.yml` 在推送到 `main` 时运行，也可以在 Actions 页面手动触发（`workflow_dispatch`）。同一次部署不会并行：并发组是 `enamel-recipes-deploy`，`cancel-in-progress` 为 false，后一次会等前一次结束。
 
-`test` 先跑 `npm ci`、`npm test`、`npm run typecheck`、`npm run lint`、`npm run build`。`deploy` 依赖 `test`。通过之后，runner 只向主机发送这一条命令：
+`test` 先跑 `npm ci`、`npm test`、`npm run typecheck`、`npm run lint`、`npm run build`。`deploy` 依赖 `test`，然后调用 [rendeyuwei/rende-deploy](https://github.com/rendeyuwei/rende-deploy) 的 `.github/workflows/deploy-project.yml@main`，项目 id 是 `recipes`。那条可复用工作流再执行安装、测试和构建。通过之后，runner 只向主机发送这一条命令：
 
 ```bash
-deploy <40位 commit sha>
+deploy recipes <40位 commit sha>
 ```
 
-也就是 `deploy $GITHUB_SHA`。现网账号是 `caiben-deploy`，登录后的强制命令是 `receive-deploy.sh`。这条通道不接受 rsync，也不接受其它远程 shell。工作流不会同步文件，也不会在服务器上执行 `npm` 或 `systemctl`。
+也就是 `deploy recipes $GITHUB_SHA`。部署账号是 `rende-deploy`，登录后的强制命令是 `/usr/local/libexec/rende-deploy/receive-deploy.sh`。这条通道不接受 rsync，也不接受其它远程 shell。工作流不会同步文件，也不会在服务器上执行 `npm` 或 `systemctl`。接收器的安装和项目配置见 rende-deploy 仓库的 README。
 
 仓库里要有四个 secret。不要把私钥或主机公钥写进仓库。
 
 | Secret | 内容 |
 |---|---|
-| `ECS_HOST` | ECS 的主机名或 IP |
-| `ECS_USER` | 部署账号。现网是 `caiben-deploy` |
+| `ECS_HOST` | ECS 的主机名或 IP，与控制台核对过 |
+| `ECS_USER` | 部署账号 `rende-deploy` |
 | `ECS_SSH_KEY` | 这个用户的私钥 |
-| `ECS_KNOWN_HOSTS` | 你在自己的机器上核对过指纹之后，`ssh-keyscan -H <主机>` 的输出 |
+| `ECS_KNOWN_HOSTS` | 与控制台比对过的主机公钥行，不要直接信任一次盲目的 `ssh-keyscan` |
 
-工作流把 `ECS_KNOWN_HOSTS` 写成 `known_hosts`，用 `-i` 私钥和 `StrictHostKeyChecking=yes` 连接。主机密钥对不上就停止，不会在第一次连接时自动信任。
+可复用工作流把 `ECS_KNOWN_HOSTS` 写成 `known_hosts`，用 `-i` 私钥和 `StrictHostKeyChecking=yes` 连接。主机密钥对不上就停止，不会在第一次连接时自动信任。
 
 SSH 成功之后，工作流请求 `https://rende.fun/recipes/api/health`，响应正文必须是 `{"ok":true}`。
 
