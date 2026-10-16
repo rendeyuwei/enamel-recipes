@@ -6,3 +6,8 @@ it("keeps the static document title in sync with SITE_NAME", () => {
   const html = readFileSync(new URL("../client/index.html", import.meta.url), "utf8");
   expect(html).toContain(`<title>${SITE_NAME} · 菜谱</title>`);
 });
+
+it("loads the shared rende.fun top bar", () => {
+  const html = readFileSync(new URL("../client/index.html", import.meta.url), "utf8");
+  expect(html).toContain('<script src="/shell/topbar.js" defer></script>');
+});
