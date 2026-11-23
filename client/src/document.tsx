@@ -37,7 +37,9 @@ function DocumentMeta({ detailTitle }: { detailTitle: string | null | undefined 
     const place = parseRouter(location.pathname);
     const lang = place.lang;
     document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
-    document.title = pageTitle(lang, place.route, detailTitle);
+    if (!(place.route.kind === "detail" && detailTitle === undefined)) {
+      document.title = pageTitle(lang, place.route, detailTitle);
+    }
     const description = ensure('meta[name="description"]', () => {
       const meta = document.createElement("meta");
       meta.setAttribute("name", "description");

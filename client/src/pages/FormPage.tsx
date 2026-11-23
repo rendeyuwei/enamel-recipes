@@ -8,7 +8,11 @@ import { useLocale } from "../locale";
 import { Shell } from "../Shell";
 
 type Draft = ImageRef & { pending: boolean };
-type Issue = { code?: string; message?: string };
+type Issue = {
+  code?: string;
+  message?: string;
+  copy?: "listError" | "uploadFailed" | "saveFailed" | "deleteFailed";
+};
 
 function line(name: string, amount: string): string {
   return amount ? `${name} ${amount}` : name;
@@ -52,7 +56,8 @@ export function FormPage({ mode }: { mode: "new" | "edit" }) {
       .catch((err: unknown) => {
         if (!live) return;
         if (err instanceof ApiError && err.status === 404) setMissing(true);
-        else setFormError({ code: err instanceof ApiError ? err.code : "client.fallback", message: err instanceof ApiError ? err.message : "" });
+        else if (err instanceof ApiError) setFormError({ code: err.code, message: err.message });
+        else setFormError({ copy: "listError" });
       });
     return () => {
       live = false;
@@ -84,7 +89,7 @@ export function FormPage({ mode }: { mode: "new" | "edit" }) {
         setFormError(null);
       } catch (err) {
         if (err instanceof ApiError) setFormError({ code: err.code || "client.fallback", message: err.message });
-        else setFormError({ code: "client.fallback" });
+        else setFormError({ copy: "uploadFailed" });
       }
     }
   }
@@ -123,7 +128,7 @@ export function FormPage({ mode }: { mode: "new" | "edit" }) {
         if (err.fields) setErrors(issues(err.fields));
         if (err.status === 401) navigate(href(`/login?next=${encodeURIComponent(pathname)}`));
       } else {
-        setFormError({ code: "client.fallback" });
+        setFormError({ copy: "saveFailed" });
       }
       setSaving(false);
     }
@@ -140,14 +145,18 @@ export function FormPage({ mode }: { mode: "new" | "edit" }) {
       navigate(href("/"));
     } catch (err) {
       if (err instanceof ApiError) setFormError({ code: err.code, message: err.message });
-      else setFormError({ code: "client.fallback" });
+      else setFormError({ copy: "deleteFailed" });
       setSaving(false);
     }
   }
 
   const back = mode === "edit" && title ? href(`/${id}`) : href("/");
   const fieldText = (issue: Issue | undefined) => (issue ? localizeError(lang, issue.code, issue.message, "field") : "");
-  const formText = formError ? localizeError(lang, formError.code, formError.message, "form") : "";
+  const formText = formError?.copy
+    ? text[formError.copy]
+    : formError
+      ? localizeError(lang, formError.code, formError.message, "form")
+      : "";
 
   return (
     <Shell variant="form">
@@ -183,7 +192,7 @@ export function FormPage({ mode }: { mode: "new" | "edit" }) {
             <div className="full">
               <div className="f">
                 <label htmlFor="title">{text.dishName}</label>
-                <input id="title" value={title} onChange={(event) => setTitle(event.target.value)} />
+                <input id="title" lang="" translate="no" value={title} onChange={(event) => setTitle(event.target.value)} />
                 {errors.title && <div className="err">{fieldText(errors.title)}</div>}
               </div>
               <div className="f">
@@ -191,7 +200,7 @@ export function FormPage({ mode }: { mode: "new" | "edit" }) {
                   {text.douyin}
                   <span className="hint">{text.douyinHint}</span>
                 </label>
-                <input id="douyin" value={douyinUrl} onChange={(event) => setDouyinUrl(event.target.value)} />
+                <input id="douyin" lang="" translate="no" value={douyinUrl} onChange={(event) => setDouyinUrl(event.target.value)} />
                 {errors.douyinUrl && <div className="err">{fieldText(errors.douyinUrl)}</div>}
               </div>
             </div>
@@ -200,7 +209,7 @@ export function FormPage({ mode }: { mode: "new" | "edit" }) {
                 {text.ingredientsLabel}
                 <span className="hint">{text.oneIngredient}</span>
               </label>
-              <textarea id="ingredients" value={ingredientText} onChange={(event) => setIngredientText(event.target.value)} />
+              <textarea id="ingredients" lang="" translate="no" value={ingredientText} onChange={(event) => setIngredientText(event.target.value)} />
               {errors.ingredients && <div className="err">{fieldText(errors.ingredients)}</div>}
             </div>
             <div className="f">
@@ -208,7 +217,7 @@ export function FormPage({ mode }: { mode: "new" | "edit" }) {
                 {text.stepsLabel}
                 <span className="hint">{text.oneStep}</span>
               </label>
-              <textarea id="steps" value={stepText} onChange={(event) => setStepText(event.target.value)} />
+              <textarea id="steps" lang="" translate="no" value={stepText} onChange={(event) => setStepText(event.target.value)} />
               {errors.steps && <div className="err">{fieldText(errors.steps)}</div>}
             </div>
             <div className="full f">

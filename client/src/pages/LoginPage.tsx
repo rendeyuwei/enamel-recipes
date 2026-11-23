@@ -17,7 +17,7 @@ export function LoginPage() {
   const text = COPY[lang];
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<{ code?: string; message?: string } | null>(null);
+  const [error, setError] = useState<{ code?: string; message?: string; copy?: "loginFailed" } | null>(null);
   const [busy, setBusy] = useState(false);
   const next = safeNext(params.get("next"));
 
@@ -31,12 +31,12 @@ export function LoginPage() {
       navigate(next === "/" ? href("/") : next);
     } catch (err) {
       if (err instanceof ApiError) setError({ code: err.code, message: err.message });
-      else setError({ code: "client.fallback" });
+      else setError({ copy: "loginFailed" });
       setBusy(false);
     }
   }
 
-  const message = error ? localizeError(lang, error.code, error.message, "form") : "";
+  const message = error?.copy ? text[error.copy] : error ? localizeError(lang, error.code, error.message, "form") : "";
 
   return (
     <Shell variant="login">

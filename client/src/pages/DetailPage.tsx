@@ -108,6 +108,8 @@ export function DetailPage() {
                               onClick={() => setOpen(image)}
                               data-user-label="1"
                               aria-label={text.viewPhoto(image.filename)}
+                              lang=""
+                              translate="no"
                             >
                               <img src={`/recipes/img/${image.key}`} alt={image.filename} lang="" translate="no" />
                             </button>
@@ -129,6 +131,7 @@ export function DetailPage() {
           aria-modal="true"
           aria-label={open.filename}
           lang=""
+          translate="no"
           onClick={() => setOpen(null)}
         >
           <img src={`/recipes/img/${open.key}`} alt={open.filename} lang="" translate="no" onClick={(event) => event.stopPropagation()} />

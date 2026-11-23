@@ -36,7 +36,7 @@ rende-site 会另有一个向后兼容的同文档刷新，以及可选的显式
 
 ## 文案与用户内容
 
-界面句在 `shared/copy.ts` 的 `COPY.zh` / `COPY.en`。中文句子保持原样。英文界面不夹汉字；徽章「菜」保留 `lang="zh-CN" translate="no"`。用户菜名、食材、步骤、链接、文件名使用 `lang=""` 与 `translate="no"`，不把它们标成中文。
+界面句在 `shared/copy.ts` 的 `COPY.zh` / `COPY.en`。中文句子保持原样。英文界面不夹汉字；徽章「菜」保留 `lang="zh-CN" translate="no"`。用户菜名、食材、步骤、链接、文件名使用 `lang=""` 与 `translate="no"`，不把它们标成中文。编辑页的四个输入框也是这样，避免浏览器翻译改写后再保存。截图按钮和放大层同样不翻译文件名。详情还在加载时不把文档标题改成首页标题。网络没有返回 HTTP 错误时，仍用原来的「没有保存成功。」「图片没有传上去。」「没有删掉。」「菜谱没有加载出来。」「登录失败」，并跟着当前语言走。
 
 `html lang`、title、description、canonical、hreflang（`zh-CN`、`en`、`x-default`）由路径决定。canonical 域是 `https://rende.fun`。中文首页 canonical 是 `/recipes/`，英文首页是 `/recipes/en/`。`x-default` 指向英文。详情标题是「原菜名 · 站名」；确认没有这道菜时用缺失标题。
 
