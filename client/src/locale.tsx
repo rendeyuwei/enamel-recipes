@@ -57,14 +57,25 @@ export function LocaleBridge() {
   const navigate = useNavigate();
   const locationRef = useRef(location);
   locationRef.current = location;
+  const requested = useRef<Lang | null>(null);
 
   useEffect(() => {
-    const link = document.querySelector<HTMLAnchorElement>("a.rf-lang");
-    if (!link) return;
-    const current = locationRef.current;
-    const next: Lang = parseRouter(current.pathname).lang === "en" ? "zh" : "en";
-    link.href = switchHref(current.pathname, current.search, current.hash, next);
-  });
+    // The router has committed once. choose is optional: v2 exposes it, a missing one still switches.
+    // Never decide this from v === 1. popstate leaves requested empty, so it does not write a preference.
+    const next = requested.current;
+    if (!next) return;
+    requested.current = null;
+    if (parseRouter(location.pathname).lang !== next) return;
+    const choose = window.rfLang?.choose;
+    if (typeof choose === "function") {
+      try {
+        choose(next);
+      } catch {
+        // A blocked or older shell still leaves the route on the explicit URL.
+      }
+    }
+    document.dispatchEvent(new Event("rf:locale"));
+  }, [location.pathname, location.search, location.hash]);
 
   useEffect(() => {
     function onClick(event: MouseEvent) {
@@ -77,8 +88,8 @@ export function LocaleBridge() {
       const current = locationRef.current;
       const next: Lang = parseRouter(current.pathname).lang === "en" ? "zh" : "en";
       const full = switchHref(current.pathname, current.search, current.hash, next);
-      link.href = full;
       event.preventDefault();
+      requested.current = next;
       navigate(toRouterTarget(full));
     }
     document.addEventListener("click", onClick, true);

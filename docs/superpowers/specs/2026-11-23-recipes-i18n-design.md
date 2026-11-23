@@ -2,7 +2,7 @@
 
 预览实现。不合并、不部署、不改生产、ESA、Nginx 或线上缓存。英文品牌是 Home Recipes。用户写入的菜名、食材、步骤、链接、图片和文件名原样保留，不自动翻译，不迁库。登录身份不变。
 
-共享契约以未合并的 [rende-site#5](https://github.com/rendeyuwei/rende-site/pull/5) `64701ced2b3e495f8e5237148096a5a665e41c17` 为准。本仓库只内联那次构建的 `lang.js`，并在本地用同一份 `dist/shell` 做预览。不修改远程 main。
+共享契约以 [rende-site#6](https://github.com/rendeyuwei/rende-site/pull/6) 的 `09687c3671464063614a06b10d353ba701d6468f` 为准。该提交把 `rfLang.v` 升到 2，并已并入 `2edd7d489aadb235b0a88ce11e20ef66f21563ab`。线上 `/shell/lang.js` 是 3758 字节，`/shell/topbar.js` 是 9926 字节，与这次本地构建一致。回归仍加载这份本地构建，不改远程 main。`recipes.en` 仍是 false。接入看 `choose` 是否存在，并派发 `rf:locale`，不判断 `v === 1`。
 
 ## 路径
 
@@ -26,15 +26,11 @@
 
 站内链接用 `routerPath` 加上语言前缀，再由 basename 变成 `/recipes/...`。普通左键在捕获阶段 `preventDefault` 后 `navigate(toRouterTarget(...))`，不改写 `place` 或 `href`。带修饰键的点击仍走真实 href。语言切换不卸载页面，未保存的菜名、食材、步骤和链接留在内存里。前进和后退走浏览器自己的历史，同样不重新取页面、不另存草稿。
 
-`64701ced` 的 `topbar.js` 只在第一次执行时绘制。`a.rf-lang` 的 href 只在 `hashchange` 时按当时的 `location` 重算。点击处理只调用 `choose()`，再按点击当下的地址写 href。没有 `popstate` 监听。同文档的 `pushState` 不改变顶栏的 `lang`、按钮文案、工具链接，也不改变它自己记下的切换地址。连续切换、后退、前进都一样。hash 没变时，`hashchange` 也不会帮它刷新。
+`09687c3` 的顶栏在同一文档里听 `rf:locale` 和 `popstate`。手选切换只走一次路由提交，提交后再调用 `choose(nextLang)` 并派发 `rf:locale`。顶栏按当前地址重画按钮、菜单和焦点。后退和前进由顶栏自己刷新，不写偏好。入口有 `<meta name="rf-mount" content="/recipes/">`，顶栏脚本有 `data-tool="recipes"`。
 
-本地预览量过这份顶栏，没有改 `rfLang`。从 `/recipes/en/` 进入后，按钮是「中文」，工具链接是 `/easypic/`、`/shutter/`、`/recipes/`、`/en/`。接着 `history.pushState` 到 `/recipes/?lang=zh`，再 push 回英文：页面自己的 `html lang` 不变，顶栏的 `lang`、文案、href 和工具链接也不变。此时重新调用 `rfLang.href` 已经指向新地址，画在页面上的链接仍是旧的。`history.back()` / `forward()` 会让本站路由更新页面语言，顶栏的 `lang`、文案和工具链接仍停在第一次。从英文编辑页连续点两次，再后退、前进，未保存菜名保持不变；按钮一直显示「中文」，而 href 被本站写成当前这一页的对向地址，于是文案和 href 会不一致。存储和 cookie 都禁用时仍能切换，并带上 `lang=zh`。重新调用 `siteHref("easypic")` 得到 `/easypic/?lang=zh`，顶栏里的链接仍是第一次画上的 `/easypic/`。
+本站不重插 `topbar.js`，不写 `__rfBar`，不替换 `rfLang` 的方法，也不改已有链接的 href。没有定时器。没有 `choose` 时仍然切换路由。
 
-本站不定义 mount 或 refresh，不重插 `topbar.js`，不写 `__rfBar`，不替换 `rfLang`。React 提交之后，只把已经存在的 `a.rf-lang` 的 href 写成当前 `switchHref`。捕获点击时没有调用 `choose()`。顶栏第一次画出的 `other` 会一直用来 `choose()`，所以从英文页连续切换时，第二次和第四次虽然页面回到英文，`rf-lang` 仍被写成 `zh`。下次打开 `/recipes/` 会留在中文。按钮文案停在「中文」，在中文页上点它却进英文。语言、菜单、标题和无障碍名字都不会跟着路由走。这是真实失败，不是另一套壳接口。
-
-`scripts/shell-toggle-regression.mjs` 用真实 Chrome 和这份顶栏检查至少四次切换、后退、前进，以及下一次打开 `/recipes/`。它要求 `rf-lang`、当前地址、`html lang`、按钮文案、标题、工具链接和 hreflang 一致，并要求未保存的菜名、食材、步骤和已上传张数还在，且没有写进本地存储。共享 refresh/mount 签名到达之前，这个脚本按预期失败。签名到达后，在路由提交时调用它，并删掉本地 href 改写。在那之前不用 `setTimeout`、不重放脚本、不改全局方法。
-
-rende-site 会另有一个向后兼容的同文档刷新，以及可选的显式 mount。签名由那边定，到了再接。在签名到达之前，这里不调用任何新的壳方法。官方刷新若会重写这个 href，再删掉本地这一处写入。
+`scripts/shell-toggle-regression.mjs` 加载这次本地构建的 `/shell/topbar.js`，不是只跑内联的 `lang.js`。它检查至少四次切换、后退、前进和下一次打开 `/recipes/`。地址、页面语言、按钮、标题、hreflang、工具链接要一致，`rf-lang` 停在最后一次手选。未保存的菜名、食材、步骤、已上传图片和登录框留在内存，不整页刷新，不重复上传，也不写入本地存储。存储被禁用时仍能切到带 `lang=zh` 的地址。
 
 ## 文案与用户内容
 
@@ -62,4 +58,4 @@ rende-site 会另有一个向后兼容的同文档刷新，以及可选的显式
 
 ## 以后启用英文主菜单
 
-菜谱预览合并并部署、且 `/recipes/en/` 已验证之后，才在 rende-site 的 `lang.ts` 把 `recipes.en` 设为 `true`（`v` 仍是 1），发布 `/shell/lang.js` 和 `topbar.js`。同时把新的 `lang.js` 再复制进 `client/vendor/rf-lang.js` 并重新部署菜谱。内联副本版本相同，不会被后加载的壳脚本覆盖。在此之前不要依赖已经发布的新资源。不依赖 shutter-count#12 或 easy-ncp-pic#17 的生产发布。
+菜谱预览合并并部署、且 `/recipes/en/` 已验证之后，才在 rende-site 的 `lang.ts` 把 `recipes.en` 设为 `true`。`v` 已经是 2，不必为这个标志再升版本。发布新的 `/shell/lang.js` 之后，再把那份文件复制进 `client/vendor/rf-lang.js` 并重新部署菜谱。相同版本的后加载副本不会覆盖先装入的内联副本。公开的 v2 已经是这份 3758 字节的 `lang.js`。`recipes.en` 仍要等本站预览合并并验证之后再打开。不依赖 shutter-count#12 或 easy-ncp-pic#17 的生产发布。

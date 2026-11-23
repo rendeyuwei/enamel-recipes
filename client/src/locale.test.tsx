@@ -61,6 +61,66 @@ it("keeps an unsaved recipe when the language link is used, and again on the way
   expect(Object.prototype.hasOwnProperty.call(window, "rfLang")).toBe(false);
 });
 
+it("chooses a later shell version the same way, without looking for v1", async () => {
+  const user = userEvent.setup();
+  const choose = vi.fn((lang: "zh" | "en") => lang === "zh" || lang === "en");
+  window.rfLang = { v: 3, leaving: false, choose } as unknown as Window["rfLang"];
+  let paints = 0;
+  const onLocale = () => {
+    paints += 1;
+  };
+  document.addEventListener("rf:locale", onLocale);
+  const link = document.createElement("a");
+  link.className = "rf-lang";
+  link.href = "/recipes/en/";
+  document.body.appendChild(link);
+  try {
+    renderAt("/recipes/");
+    await screen.findByRole("heading", { name: /dinner|今天/ });
+    await user.click(link);
+    expect(choose).toHaveBeenCalledTimes(1);
+    expect(choose).toHaveBeenCalledWith("en");
+    expect(paints).toBe(1);
+  } finally {
+    document.removeEventListener("rf:locale", onLocale);
+    link.remove();
+    delete window.rfLang;
+  }
+});
+
+it("chooses the requested language once the route commits, and not after back or forward", async () => {
+  const user = userEvent.setup();
+  const choose = vi.fn((lang: "zh" | "en") => lang === "zh" || lang === "en");
+  window.rfLang = { v: 2, leaving: false, choose } as unknown as Window["rfLang"];
+  const paints: string[] = [];
+  const onLocale = () => paints.push(document.documentElement.lang);
+  document.addEventListener("rf:locale", onLocale);
+  const link = document.createElement("a");
+  link.className = "rf-lang";
+  link.href = "/recipes/en/new";
+  link.textContent = "EN";
+  document.body.appendChild(link);
+  try {
+    renderAt("/recipes/new");
+    const title = await screen.findByLabelText("菜名");
+    await user.type(title, "EXAMPLE · 番茄");
+    await user.click(link);
+    expect(choose.mock.calls.map((call) => call[0])).toEqual(["en"]);
+    expect(paints).toEqual(["en"]);
+    expect(link.getAttribute("href")).toBe("/recipes/en/new");
+    expect((title as HTMLInputElement).value).toBe("EXAMPLE · 番茄");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    expect(choose).toHaveBeenCalledTimes(1);
+    await user.click(link);
+    expect(choose.mock.calls.map((call) => call[0])).toEqual(["en", "zh"]);
+    expect(paints).toEqual(["en", "zh-CN"]);
+  } finally {
+    document.removeEventListener("rf:locale", onLocale);
+    link.remove();
+    delete window.rfLang;
+  }
+});
+
 it("shows English for a direct editor URL and localizes a known error code", async () => {
   const user = userEvent.setup();
   renderAt("/recipes/en/login?next=%2Fen%2Fnew#form");

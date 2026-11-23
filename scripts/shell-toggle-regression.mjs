@@ -1,6 +1,5 @@
-// Real Chrome plus the shared topbar. Expected to fail until the parent refresh/mount
-// snippet is called on route commit and the local a.rf-lang href write is removed.
-// Not part of npm test. Needs Chrome, puppeteer-core, and the built client.
+// Real Chrome plus the local 09687c3 shell (rfLang v2). Not part of npm test.
+// Serves dist/shell/topbar.js, not only the vendored lang.js. Needs Chrome and puppeteer-core.
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -8,7 +7,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { hashPassword } from "../server/src/password.ts";
 
-const shellDir = process.env.RF_SHELL_DIR ?? "/tmp/rende-site/dist/shell";
+const shellDir = process.env.RF_SHELL_DIR ?? "/tmp/rende-site-09687c3/dist/shell";
 const port = Number(process.env.PORT ?? 3042);
 const origin = `http://127.0.0.1:${port}`;
 const root = "/tmp/recipes-shell-regression";
@@ -114,6 +113,7 @@ async function snap(page) {
       ingredients: document.querySelector("#ingredients") instanceof HTMLTextAreaElement ? document.querySelector("#ingredients").value : null,
       steps: document.querySelector("#steps") instanceof HTMLTextAreaElement ? document.querySelector("#steps").value : null,
       uploadText: document.body.innerText.includes("1 / 8") || document.body.innerText.includes("已传 1 / 8"),
+      images: document.querySelectorAll('img[src*="/recipes/img/"]').length,
       storageDump: (() => {
         const rows = [];
         try {
@@ -160,12 +160,19 @@ function expectAgreed(step, shot, options = {}) {
 }
 
 async function clickToggle(page, previous) {
+  const before = await page.evaluate(() => history.length);
   await page.click("a.rf-lang");
-  await page.waitForFunction((before) => location.pathname + location.search !== before, {}, previous);
+  await page.waitForFunction((prior) => location.pathname + location.search !== prior, {}, previous);
   await delay(250);
+  const after = await page.evaluate(() => history.length);
+  if (after !== before + 1) problem("history", `${before} to ${after}`);
 }
 
 async function main() {
+  const topbarSource = readFileSync(join(shellDir, "topbar.js"), "utf8");
+  if (!topbarSource.includes("rf:locale") || !topbarSource.includes("popstate")) {
+    throw new Error("shell directory is not the v2 topbar");
+  }
   await waitForServer();
   const login = await fetch(`${origin}/recipes/api/login`, {
     method: "POST",
@@ -207,6 +214,9 @@ async function main() {
     await arm(page);
     await page.goto(`${origin}/recipes/en/${id}`, { waitUntil: "domcontentloaded" });
     await page.waitForSelector("a.rf-lang");
+    await page.evaluate(() => {
+      window.__stay = 1;
+    });
     seen.push({ step: "enter", ...(await snap(page)) });
     expectAgreed("enter", seen[0], { stored: false });
     for (let i = 1; i <= 4; i += 1) {
@@ -227,6 +237,11 @@ async function main() {
     const forward = { step: "forward", ...(await snap(page)) };
     seen.push(forward);
     expectAgreed("forward", forward);
+    const stayed = await page.evaluate(() => ({
+      token: window.__stay,
+      loads: performance.getEntriesByType("navigation").length,
+    }));
+    if (stayed.token !== 1 || stayed.loads !== 1) problem("reload", `token ${stayed.token} loads ${stayed.loads}`);
 
     const again = await browser.newPage();
     await arm(again);
@@ -241,6 +256,12 @@ async function main() {
     const editor = await browser.newPage();
     editor.setDefaultTimeout(12000);
     await arm(editor);
+    let uploads = 0;
+    editor.on("request", (req) => {
+      if (req.method() !== "POST") return;
+      if (req.url().includes("/api/uploads")) uploads += 1;
+      if (req.url().includes("/api/recipes")) problem("draft", "recipe was submitted");
+    });
     await editor.goto(`${origin}/recipes/en/new`, { waitUntil: "domcontentloaded" });
     try {
       await editor.waitForSelector("#title", { timeout: 4000 });
@@ -268,8 +289,62 @@ async function main() {
     if (kept.draft !== draft) problem("draft", `title ${kept.draft}`);
     if (kept.ingredients !== "番茄 1 个") problem("draft", `ingredients ${kept.ingredients}`);
     if (kept.steps !== "先切") problem("draft", `steps ${kept.steps}`);
-    if (!kept.uploadText) problem("draft", "upload count changed");
+    if (!kept.uploadText || kept.images !== 1) problem("draft", `photos ${kept.images}`);
+    if (uploads !== 1) problem("draft", `upload requests ${uploads}`);
     if (kept.storageDump.includes(draft)) problem("draft", "private text was stored");
+
+    const guest = await browser.newPage();
+    guest.setDefaultTimeout(12000);
+    await arm(guest);
+    let loginPosts = 0;
+    guest.on("request", (req) => {
+      if (req.method() === "POST" && req.url().includes("/api/login")) loginPosts += 1;
+    });
+    await guest.goto(`${origin}/recipes/en/login`, { waitUntil: "domcontentloaded" });
+    await guest.waitForSelector("#username");
+    const loginName = "preview-user";
+    await guest.type("#username", loginName);
+    await guest.type("#password", "not-sent");
+    for (let i = 1; i <= 4; i += 1) {
+      const before = new URL(guest.url());
+      await clickToggle(guest, before.pathname + before.search);
+    }
+    const loginFields = await guest.evaluate(() => ({
+      user: document.querySelector("#username") instanceof HTMLInputElement ? document.querySelector("#username").value : "",
+      pass: document.querySelector("#password") instanceof HTMLInputElement ? document.querySelector("#password").value : "",
+    }));
+    if (loginFields.user !== loginName || loginFields.pass !== "not-sent") problem("login", "fields changed");
+    if (loginPosts !== 0) problem("login", "form submitted");
+
+    const blocked = await browser.newPage();
+    blocked.setDefaultTimeout(12000);
+    await blocked.evaluateOnNewDocument(() => {
+      const fail = () => {
+        throw new DOMException("blocked", "SecurityError");
+      };
+      Storage.prototype.setItem = fail;
+      Storage.prototype.getItem = fail;
+      Object.defineProperty(Document.prototype, "cookie", {
+        configurable: true,
+        get() {
+          throw new DOMException("blocked", "SecurityError");
+        },
+        set() {
+          throw new DOMException("blocked", "SecurityError");
+        },
+      });
+    });
+    await arm(blocked);
+    await blocked.goto(`${origin}/recipes/en/${id}`, { waitUntil: "domcontentloaded" });
+    await blocked.waitForSelector("a.rf-lang");
+    await clickToggle(blocked, `/recipes/en/${id}`);
+    const blockedZh = await snap(blocked);
+    if (!blockedZh.url.includes("lang=zh") || blockedZh.htmlLang !== "zh-CN" || blockedZh.label !== "EN") {
+      problem("blocked", `${blockedZh.url} ${blockedZh.htmlLang} ${blockedZh.label}`);
+    }
+    await clickToggle(blocked, blockedZh.url.split("#")[0]);
+    const blockedEn = await snap(blocked);
+    if (pageLang(blockedEn.url) !== "en" || blockedEn.label !== "中文") problem("blocked", blockedEn.url);
   } finally {
     writeFileSync("/tmp/recipes-shell-regression.json", JSON.stringify({ problems, seen }, null, 2));
     await browser.close();

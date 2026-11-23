@@ -5,7 +5,7 @@ declare global {
     rfLang?: {
       v: number;
       leaving: boolean;
-      place(pathname: string): { site: { id: string; base: string; en: boolean }; lang: "zh" | "en"; rest: string };
+      place(pathname: string): { site: { id: string; base: string; en: boolean }; lang: "zh" | "en"; rest: string; mount: string };
       href(lang: "zh" | "en"): string;
       choose(lang: "zh" | "en"): boolean;
       offers(lang: "zh" | "en"): boolean;

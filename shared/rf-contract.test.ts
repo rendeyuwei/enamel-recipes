@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 import { switchHref } from "./locale.ts";
 
 type Api = {
+  v: number;
   sites: { id: string; en: boolean }[];
   leaving: boolean;
   place(pathname: string): { site: { id: string }; lang: "zh" | "en"; rest: string };
@@ -85,6 +87,14 @@ function boot(options: {
 }
 
 describe("vendored rfLang contract", () => {
+  it("is the built lang.js from the shared shell commit", () => {
+    const [hash, commit] = readFileSync(new URL("../client/vendor/rf-lang.sha", import.meta.url), "utf8").trim().split("\n");
+    expect(createHash("sha256").update(script).digest("hex")).toBe(hash);
+    expect(commit).toBe("09687c3671464063614a06b10d353ba701d6468f");
+    expect(boot({ enter: false }).api.v).toBe(2);
+    expect(boot({ enter: false }).api.sites.find((site) => site.id === "recipes")?.en).toBe(false);
+  });
+
   it("matches this site's language switch to the shared href", () => {
     const samples = [
       "https://rende.fun/recipes/",
