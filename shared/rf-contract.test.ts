@@ -90,9 +90,45 @@ describe("vendored rfLang contract", () => {
   it("is the built lang.js from the shared shell commit", () => {
     const [hash, commit] = readFileSync(new URL("../client/vendor/rf-lang.sha", import.meta.url), "utf8").trim().split("\n");
     expect(createHash("sha256").update(script).digest("hex")).toBe(hash);
-    expect(commit).toBe("09687c3671464063614a06b10d353ba701d6468f");
-    expect(boot({ enter: false }).api.v).toBe(2);
-    expect(boot({ enter: false }).api.sites.find((site) => site.id === "recipes")?.en).toBe(false);
+    expect(commit).toBe("dd5cc90a05d99797f9a5191180f04162e24e4b4d");
+    const api = boot({ enter: false }).api;
+    expect(api.v).toBe(2);
+    expect(api.sites.map((site) => [site.id, site.en])).toEqual([
+      ["easypic", true],
+      ["shutter", true],
+      ["recipes", true],
+      ["home", true],
+    ]);
+  });
+
+  it("sends an English menu straight to the English homes without a second hop", () => {
+    const page = boot({
+      href: "https://rende.fun/recipes/en/",
+      enter: false,
+      blockStorage: true,
+      blockCookie: true,
+    });
+    expect(page.api.siteHref("easypic")).toBe("/easypic/en/");
+    expect(page.api.siteHref("shutter")).toBe("/shutter/en/");
+    expect(page.api.siteHref("recipes")).toBe("/recipes/en/");
+    expect(page.api.siteHref("home")).toBe("/en/");
+    expect(page.state.replaced).toBe("");
+    page.api.enter();
+    expect(page.state.replaced).toBe("");
+  });
+
+  it("keeps a Chinese menu on the Chinese paths", () => {
+    const page = boot({
+      href: "https://rende.fun/recipes/12",
+      enter: false,
+      blockStorage: true,
+      blockCookie: true,
+    });
+    expect(page.api.siteHref("easypic")).toBe("/easypic/");
+    expect(page.api.siteHref("shutter")).toBe("/shutter/");
+    expect(page.api.siteHref("recipes")).toBe("/recipes/");
+    expect(page.api.siteHref("home")).toBe("/");
+    expect(page.state.replaced).toBe("");
   });
 
   it("matches this site's language switch to the shared href", () => {
@@ -145,6 +181,7 @@ describe("vendored rfLang contract", () => {
     expect(page.api.href("zh")).toBe("/recipes/12?keep=1&lang=zh#dish");
     const explicit = boot({ href: "https://rende.fun/recipes/?lang=zh", blockStorage: true, blockCookie: true, enter: false });
     expect(explicit.api.siteHref("shutter")).toBe("/shutter/?lang=zh");
-    expect(explicit.api.sites.find((site) => site.id === "recipes")?.en).toBe(false);
+    expect(explicit.api.siteHref("recipes")).toBe("/recipes/?lang=zh");
+    expect(explicit.api.sites.find((site) => site.id === "recipes")?.en).toBe(true);
   });
 });
