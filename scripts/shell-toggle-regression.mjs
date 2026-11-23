@@ -1,4 +1,4 @@
-// Real Chrome plus the local 09687c3 shell (rfLang v2). Not part of npm test.
+// Real Chrome plus the local dd5cc90 shell (rfLang v2, en:true). Not part of npm test.
 // Serves dist/shell/topbar.js, not only the vendored lang.js. Needs Chrome and puppeteer-core.
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { hashPassword } from "../server/src/password.ts";
 
-const shellDir = process.env.RF_SHELL_DIR ?? "/tmp/rende-site-09687c3/dist/shell";
+const shellDir = process.env.RF_SHELL_DIR ?? "/tmp/rende-site-dd5cc90/dist/shell";
 const port = Number(process.env.PORT ?? 3042);
 const origin = `http://127.0.0.1:${port}`;
 const root = "/tmp/recipes-shell-regression";

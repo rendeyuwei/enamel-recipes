@@ -63,7 +63,8 @@ export function RecipeRoutes() {
 export function App() {
   return (
     <SessionProvider>
-      <BrowserRouter basename="/recipes">
+      {/* The public exact redirect `/recipes` → `/recipes/` drops the query. The root basename keeps the slash. */}
+      <BrowserRouter basename="/recipes/">
         <RecipeRoutes />
       </BrowserRouter>
     </SessionProvider>

@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { BrowserRouter, MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { RecipeRoutes } from "./App";
 import { SessionProvider } from "./session";
@@ -30,6 +30,72 @@ function renderAt(path: string) {
     </SessionProvider>,
   );
 }
+
+function exactRecipesRedirect(href: string): string {
+  const url = new URL(href, "https://rende.fun");
+  if (url.pathname === "/recipes") return "https://rende.fun/recipes/";
+  return url.href;
+}
+
+it("keeps the Chinese home query and explicit language through the public redirect", async () => {
+  const user = userEvent.setup();
+  window.history.replaceState({}, "", "/recipes/en/?q=1#h");
+  const link = document.createElement("a");
+  link.className = "rf-lang";
+  link.href = "/recipes/?q=1&lang=zh#h";
+  document.body.appendChild(link);
+  try {
+    render(
+      <SessionProvider>
+        <BrowserRouter basename="/recipes/">
+          <RecipeRoutes />
+        </BrowserRouter>
+      </SessionProvider>,
+    );
+    expect(await screen.findByRole("heading", { name: /dinner/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Home Recipes/ }).getAttribute("href")).toBe("/recipes/en/");
+    const before = window.history.length;
+    await user.click(link);
+    expect(window.location.pathname).toBe("/recipes/");
+    expect(window.location.search).toBe("?q=1&lang=zh");
+    expect(window.location.hash).toBe("#h");
+    expect(window.history.length).toBe(before + 1);
+    expect(exactRecipesRedirect(window.location.href)).toBe(window.location.href);
+    expect(exactRecipesRedirect("https://rende.fun/recipes?q=1&lang=zh#h")).toBe("https://rende.fun/recipes/");
+    expect(screen.getByRole("link", { name: /家常菜本/ }).getAttribute("href")).toBe("/recipes/");
+    expect(screen.getByRole("heading", { name: /今天/ })).toBeTruthy();
+  } finally {
+    link.remove();
+  }
+});
+
+it("keeps an unsaved editor on one history entry when the language changes", async () => {
+  const user = userEvent.setup();
+  window.history.replaceState({}, "", "/recipes/en/new");
+  const link = document.createElement("a");
+  link.className = "rf-lang";
+  link.href = "/recipes/new?lang=zh";
+  document.body.appendChild(link);
+  try {
+    render(
+      <SessionProvider>
+        <BrowserRouter basename="/recipes/">
+          <RecipeRoutes />
+        </BrowserRouter>
+      </SessionProvider>,
+    );
+    const title = await screen.findByLabelText("Dish name");
+    await user.type(title, "EXAMPLE keep");
+    const before = window.history.length;
+    await user.click(link);
+    expect(window.location.pathname).toBe("/recipes/new");
+    expect(window.location.search).toBe("?lang=zh");
+    expect(window.history.length).toBe(before + 1);
+    expect((title as HTMLInputElement).value).toBe("EXAMPLE keep");
+  } finally {
+    link.remove();
+  }
+});
 
 it("does not treat en as a recipe id", async () => {
   renderAt("/recipes/en");
