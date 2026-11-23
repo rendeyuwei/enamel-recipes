@@ -30,7 +30,9 @@
 
 本地预览量过这份顶栏，没有改 `rfLang`。从 `/recipes/en/` 进入后，按钮是「中文」，工具链接是 `/easypic/`、`/shutter/`、`/recipes/`、`/en/`。接着 `history.pushState` 到 `/recipes/?lang=zh`，再 push 回英文：页面自己的 `html lang` 不变，顶栏的 `lang`、文案、href 和工具链接也不变。此时重新调用 `rfLang.href` 已经指向新地址，画在页面上的链接仍是旧的。`history.back()` / `forward()` 会让本站路由更新页面语言，顶栏的 `lang`、文案和工具链接仍停在第一次。从英文编辑页连续点两次，再后退、前进，未保存菜名保持不变；按钮一直显示「中文」，而 href 被本站写成当前这一页的对向地址，于是文案和 href 会不一致。存储和 cookie 都禁用时仍能切换，并带上 `lang=zh`。重新调用 `siteHref("easypic")` 得到 `/easypic/?lang=zh`，顶栏里的链接仍是第一次画上的 `/easypic/`。
 
-本站不定义 mount 或 refresh，不重插 `topbar.js`，不写 `__rfBar`，不替换 `rfLang`。React 提交之后，只把已经存在的 `a.rf-lang` 的 href 写成当前 `switchHref`，让右键和复制得到这一页的真实地址。这一处不刷新顶栏语言、站名或其它工具链接。因此第一次站内切换之后，按钮文案可能仍是「中文」，而 href 已经指向英文。这是已知缺口，不是另一套壳接口。
+本站不定义 mount 或 refresh，不重插 `topbar.js`，不写 `__rfBar`，不替换 `rfLang`。React 提交之后，只把已经存在的 `a.rf-lang` 的 href 写成当前 `switchHref`。捕获点击时没有调用 `choose()`。顶栏第一次画出的 `other` 会一直用来 `choose()`，所以从英文页连续切换时，第二次和第四次虽然页面回到英文，`rf-lang` 仍被写成 `zh`。下次打开 `/recipes/` 会留在中文。按钮文案停在「中文」，在中文页上点它却进英文。语言、菜单、标题和无障碍名字都不会跟着路由走。这是真实失败，不是另一套壳接口。
+
+`scripts/shell-toggle-regression.mjs` 用真实 Chrome 和这份顶栏检查至少四次切换、后退、前进，以及下一次打开 `/recipes/`。它要求 `rf-lang`、当前地址、`html lang`、按钮文案、标题、工具链接和 hreflang 一致，并要求未保存的菜名、食材、步骤和已上传张数还在，且没有写进本地存储。共享 refresh/mount 签名到达之前，这个脚本按预期失败。签名到达后，在路由提交时调用它，并删掉本地 href 改写。在那之前不用 `setTimeout`、不重放脚本、不改全局方法。
 
 rende-site 会另有一个向后兼容的同文档刷新，以及可选的显式 mount。签名由那边定，到了再接。在签名到达之前，这里不调用任何新的壳方法。官方刷新若会重写这个 href，再删掉本地这一处写入。
 

@@ -6,7 +6,7 @@ import path from "node:path";
 import { MAX_IMAGE_BYTES, safeFilename, sniffImage, validateWrite } from "../../shared/domain.ts";
 import { zhError, type ErrorCode } from "../../shared/errors.ts";
 import { renderRecipeHtml } from "../../shared/html.ts";
-import { parseMounted } from "../../shared/locale.ts";
+import { isReservedRest, parseMounted } from "../../shared/locale.ts";
 import {
   readCookie,
   SESSION_COOKIE,
@@ -321,7 +321,9 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
   app.get("/recipes/", serveIndex);
   app.get("/recipes/*", async (req, reply) => {
     const rel = (req.params as { "*": string })["*"];
-    if (rel.startsWith("api/") || rel.startsWith("img/") || rel.startsWith("assets/")) {
+    const pathOnly = req.url.split(/[?#]/, 1)[0] ?? "/recipes";
+    const place = parseMounted(pathOnly);
+    if ((place && isReservedRest(place.rest)) || rel.startsWith("api/") || rel.startsWith("img/") || rel.startsWith("assets/")) {
       throw new HttpError(404, "route.missing");
     }
     if (rel && !rel.endsWith("/")) {

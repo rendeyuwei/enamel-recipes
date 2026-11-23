@@ -20,6 +20,11 @@ export type RecipePlace = {
 const EDIT = /^(\d+)\/edit$/;
 const DETAIL = /^(\d+)$/;
 
+export function isReservedRest(rest: string): boolean {
+  const head = rest.split("/", 1)[0] ?? "";
+  return head === "api" || head === "img" || head === "assets";
+}
+
 export function classifyRest(rest: string): RecipeRoute {
   if (rest === "") return { kind: "home" };
   if (rest === "login") return { kind: "login" };

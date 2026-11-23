@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMounted, parseRouter, switchHref, toRouterTarget } from "./locale.ts";
+import { isReservedRest, parseMounted, parseRouter, switchHref, toRouterTarget } from "./locale.ts";
 
 describe("recipe paths", () => {
   it("keeps Chinese URLs and treats en as the language, including without a slash", () => {
@@ -11,6 +11,11 @@ describe("recipe paths", () => {
     expect(parseMounted("/recipes/en/12/edit")?.route).toEqual({ kind: "edit", id: "12" });
     expect(parseMounted("/recipes/english")?.lang).toBe("zh");
     expect(parseMounted("/recipes/api/recipes")).toMatchObject({ lang: "zh", route: { kind: "other" } });
+    expect(isReservedRest("api/health")).toBe(true);
+    expect(isReservedRest("img/abc")).toBe(true);
+    expect(isReservedRest("assets/index.js")).toBe(true);
+    expect(isReservedRest(parseMounted("/recipes/en/api/health")?.rest ?? "")).toBe(true);
+    expect(isReservedRest(parseMounted("/recipes/en/12")?.rest ?? "")).toBe(false);
     expect(parseRouter("/en")).toMatchObject({ lang: "en", bare: "/" });
     expect(parseRouter("/en/")).toMatchObject({ lang: "en", bare: "/" });
     expect(parseRouter("/english")).toMatchObject({ lang: "zh", bare: "/english" });

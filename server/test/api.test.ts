@@ -473,4 +473,47 @@ describe("recipes API", () => {
     const gone = await app.inject({ method: "GET", url: `/recipes/en/${id}` });
     expect(gone.body).toContain("<title>Page not found · Home Recipes</title>");
   });
+
+  it("returns 404 for reserved api, image, and asset paths under either language", async () => {
+    const { app } = await make({ dist: true });
+    for (const url of [
+      "/recipes/en/api/health",
+      "/recipes/en/api/recipes",
+      "/recipes/en/img/abc",
+      "/recipes/en/assets/index.js",
+      "/recipes/api/missing",
+    ]) {
+      const hidden = await app.inject({ method: "GET", url });
+      expect(hidden.statusCode, url).toBe(404);
+      expect(hidden.headers["content-type"], url).toContain("application/json");
+      expect(hidden.json(), url).toEqual({ error: zhError("route.missing"), code: "route.missing" });
+    }
+    const health = await app.inject({ method: "GET", url: "/recipes/api/health" });
+    expect(health.statusCode).toBe(200);
+    expect(health.json()).toEqual({ ok: true });
+    const posted = await app.inject({
+      method: "POST",
+      url: "/recipes/en/api/login",
+      payload: { username: "rende", password: "secret-secret" },
+    });
+    expect(posted.statusCode).toBe(404);
+    const realLogin = await app.inject({
+      method: "POST",
+      url: "/recipes/api/login",
+      payload: { username: "rende", password: "secret-secret" },
+    });
+    expect(realLogin.statusCode).toBe(204);
+    const image = await app.inject({ method: "GET", url: "/recipes/img/not-a-key" });
+    expect(image.statusCode).toBe(400);
+    expect(image.json().code).toBe("upload.invalid");
+    const asset = await app.inject({ method: "GET", url: "/recipes/assets/missing.js" });
+    expect(asset.statusCode).toBe(404);
+    expect(asset.json().code).toBe("file.missing");
+    const missingRecipe = await app.inject({ method: "GET", url: "/recipes/999999" });
+    expect(missingRecipe.statusCode).toBe(200);
+    expect(String(missingRecipe.headers["content-type"])).toContain("text/html");
+    const englishMissing = await app.inject({ method: "GET", url: "/recipes/en/999999" });
+    expect(englishMissing.statusCode).toBe(200);
+    expect(englishMissing.body).toContain("<title>Page not found · Home Recipes</title>");
+  });
 });
