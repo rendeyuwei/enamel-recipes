@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { SITE_BADGE, SITE_NAME, SITE_ROMAN } from "../../shared/site.ts";
+import { COPY } from "../../shared/copy.ts";
+import { routerPath } from "../../shared/locale.ts";
+import { SITE_BADGE } from "../../shared/site.ts";
 import { api } from "./api";
+import { useLocale } from "./locale";
 import { useSession } from "./session";
 
 type Props = {
@@ -13,13 +16,15 @@ type Props = {
 export function Shell({ variant, editTo, children }: Props) {
   const session = useSession();
   const navigate = useNavigate();
+  const { href, lang } = useLocale();
+  const text = COPY[lang];
 
   async function logout() {
     try {
       await api("/logout", { method: "POST" });
     } finally {
       session.markOut();
-      navigate("/");
+      navigate(href("/"));
     }
   }
 
@@ -27,34 +32,34 @@ export function Shell({ variant, editTo, children }: Props) {
   let actions: ReactNode = null;
   if (variant === "login") {
     actions = (
-      <Link className="btn" to="/">
-        先随便看看
+      <Link className="btn" to={href("/")}>
+        {text.browse}
       </Link>
     );
   } else if (signedIn) {
     actions = (
       <>
-        <span className="label">已登录 · 管理员</span>
+        <span className="label">{text.signedIn}</span>
         {variant === "list" && (
-          <Link className="btn fill" to="/new">
-            ＋ 新菜谱
+          <Link className="btn fill" to={href("/new")}>
+            {text.newRecipe}
           </Link>
         )}
         {variant === "detail" && editTo && (
-          <Link className="btn" to={editTo}>
-            编辑
+          <Link className="btn" to={href(editTo)}>
+            {text.edit}
           </Link>
         )}
         <button className="btn" type="button" onClick={() => void logout()}>
-          退出
+          {text.logout}
         </button>
       </>
     );
   } else if (session.status === "out") {
-    const next = variant === "detail" && editTo ? editTo : "/new";
+    const next = routerPath(lang, variant === "detail" && editTo ? editTo : "/new");
     actions = (
-      <Link className="btn" to={`/login?next=${encodeURIComponent(next)}`}>
-        登录
+      <Link className="btn" to={href(`/login?next=${encodeURIComponent(next)}`)}>
+        {text.login}
       </Link>
     );
   }
@@ -62,11 +67,13 @@ export function Shell({ variant, editTo, children }: Props) {
   return (
     <>
       <header>
-        <Link className="brand" to="/">
-          <span className="badge disp">{SITE_BADGE}</span>
+        <Link className="brand" to={href("/")}>
+          <span className="badge disp" lang="zh-CN" translate="no">
+            {SITE_BADGE}
+          </span>
           <span>
-            <b className="disp">{SITE_NAME}</b>
-            <small>{SITE_ROMAN}</small>
+            <b className="disp">{text.siteName}</b>
+            <small>{text.roman}</small>
           </span>
         </Link>
         <div className="who">{actions}</div>

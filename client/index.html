@@ -2,17 +2,26 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <script>
-      var _hmt = _hmt || [];
-      (function() {
-        var hm = document.createElement("script");
-        hm.src = "https://hm.baidu.com/hm.js?f4b1d2fc4d60c37f898b469f83237dab";
-        var s = document.getElementsByTagName("script")[0];
-        s.parentNode.insertBefore(hm, s);
-      })();
-    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>家常菜本 · 菜谱</title>
+    <meta name="description" content="做过的菜，按菜名或食材查找，打开就能按步骤做。" />
+    <link rel="canonical" href="https://rende.fun/recipes/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://rende.fun/recipes/" />
+    <link rel="alternate" hreflang="en" href="https://rende.fun/recipes/en/" />
+    <link rel="alternate" hreflang="x-default" href="https://rende.fun/recipes/en/" />
+    <meta name="rf-mount" content="/recipes/" />
+    <script data-rf-enter src="/shell/lang.js"></script>
+    <script>
+      if (!(window.rfLang && window.rfLang.leaving)) {
+        var _hmt = _hmt || [];
+        (function () {
+          var hm = document.createElement("script");
+          hm.src = "https://hm.baidu.com/hm.js?f4b1d2fc4d60c37f898b469f83237dab";
+          var s = document.getElementsByTagName("script")[0];
+          s.parentNode.insertBefore(hm, s);
+        })();
+      }
+    </script>
     <link rel="icon" href="/recipes/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -24,6 +33,6 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script src="/shell/topbar.js" defer></script>
+    <script src="/shell/topbar.js" defer data-tool="recipes"></script>
   </body>
 </html>

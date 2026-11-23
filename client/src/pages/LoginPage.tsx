@@ -1,8 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { COPY } from "../../../shared/copy.ts";
 import { safeNext } from "../../../shared/domain.ts";
-import { SITE_BADGE, SITE_NAME } from "../../../shared/site.ts";
+import { localizeError } from "../../../shared/errors.ts";
+import { SITE_BADGE } from "../../../shared/site.ts";
 import { ApiError, api } from "../api";
+import { useLocale } from "../locale";
 import { Shell } from "../Shell";
 import { useSession } from "../session";
 
@@ -10,39 +13,42 @@ export function LoginPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const session = useSession();
+  const { href, lang } = useLocale();
+  const text = COPY[lang];
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<{ code?: string; message?: string; copy?: "loginFailed" } | null>(null);
   const [busy, setBusy] = useState(false);
   const next = safeNext(params.get("next"));
-
-  useEffect(() => {
-    document.title = `登录 · ${SITE_NAME}`;
-  }, []);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
-    setError("");
+    setError(null);
     try {
       await api("/login", { method: "POST", body: JSON.stringify({ username, password }) });
       session.markIn();
-      navigate(next);
+      navigate(next === "/" ? href("/") : next);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "登录失败");
+      if (err instanceof ApiError) setError({ code: err.code, message: err.message });
+      else setError({ copy: "loginFailed" });
       setBusy(false);
     }
   }
 
+  const message = error?.copy ? text[error.copy] : error ? localizeError(lang, error.code, error.message, "form") : "";
+
   return (
     <Shell variant="login">
       <div className="login">
-        <span className="badge disp">{SITE_BADGE}</span>
-        <h1 className="disp">管理员登录</h1>
-        <p>所有人都能看菜谱，登录后可编辑。</p>
+        <span className="badge disp" lang="zh-CN" translate="no">
+          {SITE_BADGE}
+        </span>
+        <h1 className="disp">{text.loginHeading}</h1>
+        <p>{text.loginIntro}</p>
         <form className="card" onSubmit={(event) => void onSubmit(event)}>
           <div className="f">
-            <label htmlFor="username">账号</label>
+            <label htmlFor="username">{text.username}</label>
             <input
               id="username"
               name="username"
@@ -52,7 +58,7 @@ export function LoginPage() {
             />
           </div>
           <div className="f">
-            <label htmlFor="password">密码</label>
+            <label htmlFor="password">{text.password}</label>
             <input
               id="password"
               name="password"
@@ -61,11 +67,11 @@ export function LoginPage() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />
-            {error && <div className="err">{error}</div>}
+            {message && <div className="err">{message}</div>}
           </div>
           <div className="actions">
             <button className="btn fill" type="submit" disabled={busy}>
-              {busy ? "登录中…" : "登录"}
+              {busy ? text.loggingIn : text.login}
             </button>
           </div>
         </form>

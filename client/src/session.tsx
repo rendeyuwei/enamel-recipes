@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
+import { COPY } from "../../shared/copy.ts";
 import { api } from "./api";
+import { useLocale } from "./locale";
 
 type Status = "loading" | "in" | "out";
 
@@ -40,15 +42,16 @@ export function useSession(): SessionValue {
 export function RequireAuth({ children }: { children: ReactNode }) {
   const session = useSession();
   const location = useLocation();
+  const { href, lang, pathname } = useLocale();
   if (session.status === "loading") {
     return (
       <main>
-        <p className="tally">正在确认登录…</p>
+        <p className="tally">{COPY[lang].checkingLogin}</p>
       </main>
     );
   }
   if (session.status === "out") {
-    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
+    return <Navigate to={href(`/login?next=${encodeURIComponent(pathname || location.pathname)}`)} replace />;
   }
   return children;
 }

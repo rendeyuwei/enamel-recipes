@@ -9,6 +9,7 @@ import {
   type RecipeCard,
   type RecipeRecord,
 } from "../../shared/domain.ts";
+import { zhError, type ErrorCode } from "../../shared/errors.ts";
 
 type RecipeRow = {
   id: number;
@@ -32,7 +33,7 @@ type ImageRow = {
 
 export type SaveResult =
   | { ok: true; recipe: RecipeRecord; removedKeys: string[] }
-  | { ok: false; status: 400 | 404; error: string };
+  | { ok: false; status: 400 | 404; error: string; code: ErrorCode };
 
 function contentType(value: string): ImageContentType {
   if (value === "image/jpeg" || value === "image/png" || value === "image/webp") return value;
@@ -77,12 +78,21 @@ export function createRepo(db: Database.Database) {
     return row ? read(row) : null;
   }
 
-  function resolveImages(keys: string[], selfId: number | null): { ok: true; images: ImageRef[] } | { ok: false; error: string } {
+  function reject(status: 400 | 404, code: ErrorCode): { ok: false; status: 400 | 404; error: string; code: ErrorCode } {
+    return { ok: false, status, error: zhError(code), code };
+  }
+
+  function resolveImages(
+    keys: string[],
+    selfId: number | null,
+  ): { ok: true; images: ImageRef[] } | { ok: false; error: string; code: ErrorCode } {
     const images: ImageRef[] = [];
     for (const key of keys) {
       const row = imageByKey.get(key) as ImageRow | undefined;
-      if (!row) return { ok: false, error: "找不到这张截图" };
-      if (row.recipe_id !== null && row.recipe_id !== selfId) return { ok: false, error: "这张截图属于另一道菜" };
+      if (!row) return { ok: false, error: zhError("upload.unknown"), code: "upload.unknown" };
+      if (row.recipe_id !== null && row.recipe_id !== selfId) {
+        return { ok: false, error: zhError("upload.foreign"), code: "upload.foreign" };
+      }
       images.push(toImage(row));
     }
     return { ok: true, images };
@@ -106,7 +116,7 @@ export function createRepo(db: Database.Database) {
 
   function writeRecipe(id: number | null, write: NormalizedWrite, createdAt: string, updatedAt: string): SaveResult {
     const resolved = resolveImages(write.imageKeys, id);
-    if (!resolved.ok) return { ok: false, status: 400, error: resolved.error };
+    if (!resolved.ok) return { ok: false, status: 400, error: resolved.error, code: resolved.code };
     const previous = id === null ? [] : imagesOf(id).map((image) => image.key);
     const removedKeys = previous.filter((key) => !write.imageKeys.includes(key));
     const fields = {
@@ -137,7 +147,7 @@ export function createRepo(db: Database.Database) {
       return recipeId;
     })();
     const recipe = get(savedId);
-    if (!recipe) return { ok: false, status: 404, error: "没有这道菜" };
+    if (!recipe) return reject(404, "recipe.missing");
     return { ok: true, recipe, removedKeys };
   }
 
@@ -160,7 +170,7 @@ export function createRepo(db: Database.Database) {
       return writeRecipe(null, write, createdAt, updatedAt);
     },
     update(id: number, write: NormalizedWrite, updatedAt: string): SaveResult {
-      if (!get(id)) return { ok: false, status: 404, error: "没有这道菜" };
+      if (!get(id)) return reject(404, "recipe.missing");
       const existing = get(id);
       return writeRecipe(id, write, existing?.createdAt ?? updatedAt, updatedAt);
     },

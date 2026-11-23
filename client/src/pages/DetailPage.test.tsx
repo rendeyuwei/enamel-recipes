@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { expect, it, vi } from "vitest";
 import type { RecipeRecord } from "../../../shared/domain.ts";
+import { RecipeTitleProvider } from "../document";
 import { DetailPage } from "./DetailPage";
 import { SessionProvider } from "../session";
 
@@ -53,7 +54,28 @@ it("shows ingredients, numbered steps, the video link, and a larger shot", async
   const video = screen.getByRole("link", { name: "▶ 看原视频" });
   expect(video.getAttribute("href")).toBe("https://v.douyin.com/iRk8aXc/");
   expect(video.getAttribute("target")).toBe("_blank");
-  await user.click(screen.getByRole("button", { name: "查看截图 IMG_0412.jpg" }));
+  const button = screen.getByRole("button", { name: "查看截图 IMG_0412.jpg" });
+  expect(button.getAttribute("translate")).toBe("no");
+  await user.click(button);
   const shot = screen.getByRole("dialog");
+  expect(shot.getAttribute("translate")).toBe("no");
   expect(shot.querySelector("img")?.getAttribute("src")).toBe(`/recipes/img/${"ab".repeat(16)}.jpg`);
+});
+
+it("leaves the server title in place until the recipe title is known", async () => {
+  document.title = "番茄炒蛋 · 家常菜本";
+  vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined)));
+  render(
+    <SessionProvider>
+      <MemoryRouter initialEntries={["/1"]}>
+        <RecipeTitleProvider>
+          <Routes>
+            <Route path="/:id" element={<DetailPage />} />
+          </Routes>
+        </RecipeTitleProvider>
+      </MemoryRouter>
+    </SessionProvider>,
+  );
+  expect(await screen.findByText("正在加载…")).toBeTruthy();
+  expect(document.title).toBe("番茄炒蛋 · 家常菜本");
 });
