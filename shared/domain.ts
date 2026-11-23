@@ -1,3 +1,5 @@
+import { zhError, type ErrorCode } from "./errors.ts";
+
 export type Ingredient = { name: string; amount: string };
 
 export type ImageContentType = "image/jpeg" | "image/png" | "image/webp";
@@ -47,7 +49,7 @@ export type NormalizedWrite = {
 
 export type FieldName = "title" | "douyinUrl" | "ingredients" | "steps" | "images";
 
-export type FieldError = { field: FieldName; message: string };
+export type FieldError = { field: FieldName; code: ErrorCode; message: string };
 
 export type SniffedImage = { contentType: ImageContentType; ext: ".jpg" | ".png" | ".webp" };
 
@@ -169,66 +171,83 @@ export function safeNext(raw: string | null): string {
   return raw;
 }
 
-function fail(fields: FieldError[]): { ok: false; error: string; fields: FieldError[] } {
-  return { ok: false, error: fields[0]?.message ?? "请求格式不对", fields };
+function fieldError(field: FieldName, code: ErrorCode): FieldError {
+  return { field, code, message: zhError(code) };
 }
 
-function linesOf(value: unknown, field: FieldName, emptyMessage: string, max: number, maxMessage: string): string[] | FieldError {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-    return { field, message: "请求格式不对" };
-  }
+function fail(fields: FieldError[]): { ok: false; error: string; code: ErrorCode; fields: FieldError[] } {
+  const first = fields[0];
+  return {
+    ok: false,
+    error: first?.message ?? zhError("request.bad"),
+    code: first?.code ?? "request.bad",
+    fields,
+  };
+}
+
+function linesOf(
+  value: unknown,
+  field: FieldName,
+  bad: ErrorCode,
+  empty: ErrorCode,
+  max: number,
+  tooMany: ErrorCode,
+): string[] | FieldError {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) return fieldError(field, bad);
   const lines = value.map((item) => item.trim()).filter(Boolean);
-  if (lines.length === 0) return { field, message: emptyMessage };
-  if (lines.length > max) return { field, message: maxMessage };
-  if (lines.some((line) => [...line].length > 300)) return { field, message: "这一行太长了" };
+  if (lines.length === 0) return fieldError(field, empty);
+  if (lines.length > max) return fieldError(field, tooMany);
+  if (lines.some((line) => [...line].length > 300)) return fieldError(field, "line.too_long");
   return lines;
 }
 
-export function validateWrite(input: unknown): { ok: true; value: NormalizedWrite } | { ok: false; error: string; fields: FieldError[] } {
-  if (!input || typeof input !== "object") return fail([{ field: "title", message: "请求格式不对" }]);
+export function validateWrite(
+  input: unknown,
+): { ok: true; value: NormalizedWrite } | { ok: false; error: string; code: ErrorCode; fields: FieldError[] } {
+  if (!input || typeof input !== "object") return fail([fieldError("title", "request.bad")]);
   const body = input as Record<string, unknown>;
   const fields: FieldError[] = [];
 
   const titleRaw = typeof body.title === "string" ? body.title.replace(/[\r\n]+/g, " ").trim() : "";
-  if (!titleRaw) fields.push({ field: "title", message: "请填写菜名" });
-  else if ([...titleRaw].length > 60) fields.push({ field: "title", message: "菜名最多 60 个字" });
+  if (!titleRaw) fields.push(fieldError("title", "title.required"));
+  else if ([...titleRaw].length > 60) fields.push(fieldError("title", "title.too_long"));
 
   let douyinUrl: string | null = null;
   const douyinRaw = typeof body.douyinUrl === "string" ? body.douyinUrl.trim() : "";
-  if (typeof body.douyinUrl !== "string") fields.push({ field: "douyinUrl", message: "请求格式不对" });
+  if (typeof body.douyinUrl !== "string") fields.push(fieldError("douyinUrl", "request.bad"));
   else if (douyinRaw) {
     try {
       const url = new URL(douyinRaw);
       if (url.protocol !== "http:" && url.protocol !== "https:") {
-        fields.push({ field: "douyinUrl", message: "抖音链接要是 http 或 https 网址" });
+        fields.push(fieldError("douyinUrl", "douyin.url"));
       } else if (douyinRaw.length > 500) {
-        fields.push({ field: "douyinUrl", message: "抖音链接太长了" });
+        fields.push(fieldError("douyinUrl", "douyin.too_long"));
       } else {
         douyinUrl = url.toString();
       }
     } catch {
-      fields.push({ field: "douyinUrl", message: "抖音链接要是 http 或 https 网址" });
+      fields.push(fieldError("douyinUrl", "douyin.url"));
     }
   }
 
-  const ingredientLines = linesOf(body.ingredientLines, "ingredients", "至少写一种食材", 40, "最多 40 种食材");
+  const ingredientLines = linesOf(body.ingredientLines, "ingredients", "request.bad", "ingredients.required", 40, "ingredients.too_many");
   const ingredients = Array.isArray(ingredientLines)
     ? ingredientLines.map((line) => parseIngredientLine(line)).filter((item): item is Ingredient => item !== null)
     : [];
   if (!Array.isArray(ingredientLines)) fields.push(ingredientLines);
 
-  const stepLines = linesOf(body.stepLines, "steps", "至少写一步", 40, "最多 40 步");
+  const stepLines = linesOf(body.stepLines, "steps", "request.bad", "steps.required", 40, "steps.too_many");
   if (!Array.isArray(stepLines)) fields.push(stepLines);
 
   let imageKeys: string[] = [];
   if (!Array.isArray(body.imageKeys) || body.imageKeys.some((item) => typeof item !== "string")) {
-    fields.push({ field: "images", message: "请求格式不对" });
+    fields.push(fieldError("images", "request.bad"));
   } else if (body.imageKeys.length > MAX_IMAGES) {
-    fields.push({ field: "images", message: "一道菜最多 8 张截图" });
+    fields.push(fieldError("images", "images.too_many"));
   } else if (body.imageKeys.some((key) => !IMAGE_KEY.test(key))) {
-    fields.push({ field: "images", message: "截图无效" });
+    fields.push(fieldError("images", "upload.invalid"));
   } else if (new Set(body.imageKeys).size !== body.imageKeys.length) {
-    fields.push({ field: "images", message: "截图重复了" });
+    fields.push(fieldError("images", "images.duplicate"));
   } else {
     imageKeys = body.imageKeys;
   }

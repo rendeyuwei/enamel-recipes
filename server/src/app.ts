@@ -4,6 +4,9 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { MAX_IMAGE_BYTES, safeFilename, sniffImage, validateWrite } from "../../shared/domain.ts";
+import { zhError, type ErrorCode } from "../../shared/errors.ts";
+import { renderRecipeHtml } from "../../shared/html.ts";
+import { parseMounted } from "../../shared/locale.ts";
 import {
   readCookie,
   SESSION_COOKIE,
@@ -110,11 +113,11 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
   app.setErrorHandler((err: unknown, req, reply) => {
     const status = statusOf(err);
     if (status >= 500) req.log.error(err);
-    let message = "服务器出错了";
-    if (err instanceof HttpError) message = err.message;
-    else if (status === 413) message = "单张图片不能超过 2MB";
-    else if (status < 500) message = "请求格式不对";
-    const body = err instanceof HttpError && err.fields ? { error: message, fields: err.fields } : { error: message };
+    const code: ErrorCode =
+      err instanceof HttpError ? err.code : status === 413 ? "upload.too_large" : status < 500 ? "request.bad" : "server.error";
+    const message = err instanceof HttpError ? err.message : zhError(code);
+    const fields = err instanceof HttpError ? err.fields : undefined;
+    const body = fields ? { error: message, code, fields } : { error: message, code };
     reply.code(status).send(body);
   });
 
@@ -131,7 +134,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
   }
 
   function requireUser(req: FastifyRequest) {
-    if (!currentSession(req)) throw new HttpError(401, "请先登录");
+    if (!currentSession(req)) throw new HttpError(401, "auth.required");
   }
 
   app.addHook("onRequest", async (req, reply) => {
@@ -142,29 +145,43 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
     const decision = writeLimit.take(req.ip);
     if (!decision.ok) {
       reply.header("retry-after", String(decision.retryAfterSec));
-      throw new HttpError(429, "写得太勤了，等一会儿再试。");
+      throw new HttpError(429, "write.rate");
     }
   });
 
-  async function serveIndex(_req: FastifyRequest, reply: FastifyReply) {
+  async function serveIndex(req: FastifyRequest, reply: FastifyReply) {
+    const pathOnly = req.url.split(/[?#]/, 1)[0] ?? "/recipes";
+    const place = parseMounted(pathOnly);
+    const lang = place?.lang ?? "zh";
+    const file = path.join(dist, lang === "en" ? "en/index.html" : "index.html");
+    let html: string;
     try {
-      const html = await fs.readFile(path.join(dist, "index.html"));
-      return reply.type("text/html; charset=utf-8").send(html);
+      html = await fs.readFile(file, "utf8");
     } catch {
-      return reply.code(503).type("text/plain; charset=utf-8").send("前端还没构建。先运行 npm run build。");
+      const message =
+        lang === "en" ? "The frontend is not built. Run npm run build." : "前端还没构建。先运行 npm run build。";
+      return reply.code(503).header("cache-control", "no-store").type("text/plain; charset=utf-8").send(message);
     }
+    let detailTitle: string | null | undefined;
+    if (place?.route.kind === "detail") {
+      const id = Number(place.route.id);
+      detailTitle = Number.isInteger(id) ? (repo.get(id)?.title ?? null) : null;
+    }
+    const body = renderRecipeHtml(html, pathOnly, detailTitle);
+    return reply.header("cache-control", "no-cache").type("text/html; charset=utf-8").send(body);
   }
 
   async function serveFile(root: string, rel: string, reply: FastifyReply, cache: string | null) {
-    if (rel.includes("\0")) throw new HttpError(400, "请求格式不对");
+    if (rel.includes("\0")) throw new HttpError(400, "request.bad");
     const file = path.resolve(root, rel);
-    if (!inside(root, file)) throw new HttpError(400, "请求格式不对");
+    if (!inside(root, file)) throw new HttpError(400, "request.bad");
     try {
       const body = await fs.readFile(file);
       if (cache) reply.header("cache-control", cache);
+      else if (path.extname(file) === ".html") reply.header("cache-control", "no-cache");
       return reply.type(mime(file)).send(body);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") throw new HttpError(404, "没有这个文件");
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") throw new HttpError(404, "file.missing");
       throw err;
     }
   }
@@ -177,7 +194,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
     const gate = loginLimit.blocked(req.ip);
     if (gate.blocked) {
       reply.header("retry-after", String(gate.retryAfterSec));
-      throw new HttpError(429, "试得太勤了，等一会儿再登录。");
+      throw new HttpError(429, "auth.rate");
     }
     const body = (req.body ?? {}) as { username?: unknown; password?: unknown };
     const username = typeof body.username === "string" ? body.username : "";
@@ -185,7 +202,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
     const passwordOk = verifyPassword(password, env.adminPasswordHash);
     if (!passwordOk || username !== env.adminUser) {
       loginLimit.hit(req.ip);
-      throw new HttpError(401, "账号或密码不对，再试一次。");
+      throw new HttpError(401, "auth.invalid");
     }
     loginLimit.reset(req.ip);
     const id = randomBytes(32).toString("hex");
@@ -197,7 +214,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
   app.post("/recipes/api/logout", async (req, reply) => {
     const id = currentSession(req);
     reply.header("set-cookie", sessionCookie("", env.cookieSecure, 0));
-    if (!id) throw new HttpError(401, "请先登录");
+    if (!id) throw new HttpError(401, "auth.required");
     repo.deleteSession(id);
     return reply.code(204).send();
   });
@@ -210,30 +227,30 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
 
   app.get("/recipes/api/recipes/:id", async (req) => {
     const id = Number((req.params as { id: string }).id);
-    if (!Number.isInteger(id)) throw new HttpError(404, "没有这道菜");
+    if (!Number.isInteger(id)) throw new HttpError(404, "recipe.missing");
     const recipe = repo.get(id);
-    if (!recipe) throw new HttpError(404, "没有这道菜");
+    if (!recipe) throw new HttpError(404, "recipe.missing");
     return recipe;
   });
 
   app.post("/recipes/api/recipes", async (req, reply) => {
     requireUser(req);
     const parsed = validateWrite(req.body);
-    if (!parsed.ok) throw new HttpError(400, parsed.error, parsed.fields);
+    if (!parsed.ok) throw new HttpError(400, parsed.code, parsed.fields);
     const stamp = now().toISOString();
     const saved = repo.create(parsed.value, stamp, stamp);
-    if (!saved.ok) throw new HttpError(saved.status, saved.error);
+    if (!saved.ok) throw new HttpError(saved.status, saved.code);
     return reply.code(201).send(saved.recipe);
   });
 
   app.put("/recipes/api/recipes/:id", async (req) => {
     requireUser(req);
     const id = Number((req.params as { id: string }).id);
-    if (!Number.isInteger(id)) throw new HttpError(404, "没有这道菜");
+    if (!Number.isInteger(id)) throw new HttpError(404, "recipe.missing");
     const parsed = validateWrite(req.body);
-    if (!parsed.ok) throw new HttpError(400, parsed.error, parsed.fields);
+    if (!parsed.ok) throw new HttpError(400, parsed.code, parsed.fields);
     const saved = repo.update(id, parsed.value, now().toISOString());
-    if (!saved.ok) throw new HttpError(saved.status, saved.error);
+    if (!saved.ok) throw new HttpError(saved.status, saved.code);
     for (const key of saved.removedKeys) await store.delete(key);
     return saved.recipe;
   });
@@ -241,9 +258,9 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
   app.delete("/recipes/api/recipes/:id", async (req, reply) => {
     requireUser(req);
     const id = Number((req.params as { id: string }).id);
-    if (!Number.isInteger(id)) throw new HttpError(404, "没有这道菜");
+    if (!Number.isInteger(id)) throw new HttpError(404, "recipe.missing");
     const keys = repo.remove(id);
-    if (!keys) throw new HttpError(404, "没有这道菜");
+    if (!keys) throw new HttpError(404, "recipe.missing");
     for (const key of keys) await store.delete(key);
     return reply.code(204).send();
   });
@@ -251,11 +268,11 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
   app.post("/recipes/api/uploads", async (req) => {
     requireUser(req);
     const file = await req.file();
-    if (!file) throw new HttpError(400, "没有收到图片");
+    if (!file) throw new HttpError(400, "upload.empty");
     const buf = await file.toBuffer();
-    if (buf.length > MAX_IMAGE_BYTES) throw new HttpError(400, "单张图片不能超过 2MB");
+    if (buf.length > MAX_IMAGE_BYTES) throw new HttpError(400, "upload.too_large");
     const sniffed = sniffImage(buf);
-    if (!sniffed) throw new HttpError(400, "只能上传 JPEG、PNG 或 WebP");
+    if (!sniffed) throw new HttpError(400, "upload.type");
     const key = randomBytes(16).toString("hex") + sniffed.ext;
     await store.put(key, buf, sniffed.contentType);
     const image = {
@@ -277,21 +294,21 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
   app.delete("/recipes/api/uploads/:key", async (req, reply) => {
     requireUser(req);
     const key = (req.params as { key: string }).key;
-    if (!/^[a-f0-9]{32}\.(jpg|png|webp)$/.test(key)) throw new HttpError(400, "截图无效");
+    if (!/^[a-f0-9]{32}\.(jpg|png|webp)$/.test(key)) throw new HttpError(400, "upload.invalid");
     const result = repo.deletePending(key);
-    if (result === "missing") throw new HttpError(404, "没有这张截图");
-    if (result === "attached") throw new HttpError(409, "这张图还在菜谱上");
+    if (result === "missing") throw new HttpError(404, "upload.missing");
+    if (result === "attached") throw new HttpError(409, "upload.attached");
     await store.delete(key);
     return reply.code(204).send();
   });
 
   app.get("/recipes/img/:key", async (req, reply) => {
     const key = (req.params as { key: string }).key;
-    if (!/^[a-f0-9]{32}\.(jpg|png|webp)$/.test(key)) throw new HttpError(400, "截图无效");
+    if (!/^[a-f0-9]{32}\.(jpg|png|webp)$/.test(key)) throw new HttpError(400, "upload.invalid");
     const meta = repo.image(key);
-    if (!meta) throw new HttpError(404, "没有这张截图");
+    if (!meta) throw new HttpError(404, "upload.missing");
     const obj = await store.get(key);
-    if (!obj) throw new HttpError(404, "没有这张截图");
+    if (!obj) throw new HttpError(404, "upload.missing");
     reply.header("cache-control", "public, max-age=31536000, immutable");
     return reply.type(meta.contentType).send(obj.body);
   });
@@ -305,16 +322,18 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
   app.get("/recipes/*", async (req, reply) => {
     const rel = (req.params as { "*": string })["*"];
     if (rel.startsWith("api/") || rel.startsWith("img/") || rel.startsWith("assets/")) {
-      throw new HttpError(404, "没有这个地址");
+      throw new HttpError(404, "route.missing");
     }
     if (rel && !rel.endsWith("/")) {
       const file = path.resolve(dist, rel);
       if (inside(dist, file)) {
         try {
           const body = await fs.readFile(file);
+          if (path.extname(file) === ".html") reply.header("cache-control", "no-cache");
           return reply.type(mime(file)).send(body);
         } catch (err) {
-          if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+          const code = (err as NodeJS.ErrnoException).code;
+          if (code !== "ENOENT" && code !== "EISDIR") throw err;
         }
       }
     }

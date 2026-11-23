@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { MAX_IMAGE_BYTES } from "../../shared/domain.ts";
+import { zhError } from "../../shared/errors.ts";
+import { deriveEnglishShell } from "../../shared/html.ts";
 import { buildApp } from "../src/app.ts";
 import type { Env } from "../src/env.ts";
 import { hashPassword } from "../src/password.ts";
@@ -44,7 +46,11 @@ async function make(options: { secure?: boolean; limits?: Parameters<typeof buil
   if (options.dist) {
     clientDist = path.join(dir, "dist");
     fs.mkdirSync(clientDist);
-    fs.writeFileSync(path.join(clientDist, "index.html"), '<!doctype html><div id="root"></div>');
+    const shell =
+      '<!doctype html><html lang="zh-CN"><head><title>家常菜本 · 菜谱</title><meta name="description" content="做过的菜，按菜名或食材查找，打开就能按步骤做。" /><link rel="canonical" href="https://rende.fun/recipes/" /><link rel="alternate" hreflang="zh-CN" href="https://rende.fun/recipes/" /><link rel="alternate" hreflang="en" href="https://rende.fun/recipes/en/" /><link rel="alternate" hreflang="x-default" href="https://rende.fun/recipes/en/" /><script data-rf-enter>enter()</script></head><body><div id="root"></div></body></html>';
+    fs.writeFileSync(path.join(clientDist, "index.html"), shell);
+    fs.mkdirSync(path.join(clientDist, "en"));
+    fs.writeFileSync(path.join(clientDist, "en/index.html"), deriveEnglishShell(shell));
     fs.mkdirSync(path.join(clientDist, "assets"));
     fs.writeFileSync(path.join(clientDist, "assets", "app.js"), "console.log(1)");
   }
@@ -98,6 +104,8 @@ describe("recipes API", () => {
     const page = await app.inject({ method: "GET", url: "/recipes/login" });
     expect(page.statusCode).toBe(200);
     expect(page.body).toContain('<div id="root"></div>');
+    expect(page.headers["cache-control"]).toBe("no-cache");
+    expect(String(page.headers["cache-control"])).not.toContain("immutable");
     const asset = await app.inject({ method: "GET", url: "/recipes/assets/app.js" });
     expect(asset.body).toBe("console.log(1)");
     expect(asset.headers["cache-control"]).toBe("public, max-age=31536000, immutable");
@@ -107,7 +115,7 @@ describe("recipes API", () => {
     const { app } = await make();
     const denied = await app.inject({ method: "POST", url: "/recipes/api/recipes", payload: baseRecipe });
     expect(denied.statusCode).toBe(401);
-    expect(denied.json()).toEqual({ error: "请先登录" });
+    expect(denied.json()).toEqual({ error: zhError("auth.required"), code: "auth.required" });
 
     const badPassword = await app.inject({
       method: "POST",
@@ -121,7 +129,7 @@ describe("recipes API", () => {
     });
     expect(badPassword.statusCode).toBe(401);
     expect(badUser.statusCode).toBe(401);
-    expect(badPassword.json()).toEqual({ error: "账号或密码不对，再试一次。" });
+    expect(badPassword.json()).toEqual({ error: zhError("auth.invalid"), code: "auth.invalid" });
     expect(badUser.json()).toEqual(badPassword.json());
   });
 
@@ -162,7 +170,7 @@ describe("recipes API", () => {
     expect((await limited.app.inject({ method: "POST", url: "/recipes/api/login", payload: body })).statusCode).toBe(401);
     const blocked = await limited.app.inject({ method: "POST", url: "/recipes/api/login", payload: body });
     expect(blocked.statusCode).toBe(429);
-    expect(blocked.json()).toEqual({ error: "试得太勤了，等一会儿再登录。" });
+    expect(blocked.json()).toEqual({ error: zhError("auth.rate"), code: "auth.rate" });
 
     const writes = await make({ limits: { loginFailures: 10, writes: 1, writeWindowMs: 60_000 } });
     const login = await writes.app.inject({
@@ -176,7 +184,7 @@ describe("recipes API", () => {
     expect(first.statusCode).toBe(201);
     const second = await writes.app.inject({ method: "POST", url: "/recipes/api/recipes", headers: { cookie }, payload: baseRecipe });
     expect(second.statusCode).toBe(429);
-    expect(second.json()).toEqual({ error: "写得太勤了，等一会儿再试。" });
+    expect(second.json()).toEqual({ error: zhError("write.rate"), code: "write.rate" });
   });
 
   it("creates, searches, updates, and rejects a script-looking title as text", async () => {
@@ -262,7 +270,7 @@ describe("recipes API", () => {
       payload: multipart(Buffer.from("GIF89aXXXX"), "a.gif").payload,
     });
     expect(gif.statusCode).toBe(400);
-    expect(gif.json()).toEqual({ error: "只能上传 JPEG、PNG 或 WebP" });
+    expect(gif.json()).toEqual({ error: zhError("upload.type"), code: "upload.type" });
 
     const big = Buffer.alloc(MAX_IMAGE_BYTES + 1, 0);
     big[0] = 0xff;
@@ -275,7 +283,7 @@ describe("recipes API", () => {
       payload: multipart(big, "big.jpg").payload,
     });
     expect(oversized.statusCode).toBe(413);
-    expect(oversized.json()).toEqual({ error: "单张图片不能超过 2MB" });
+    expect(oversized.json()).toEqual({ error: zhError("upload.too_large"), code: "upload.too_large" });
 
     const tooMany = await app.inject({
       method: "POST",
@@ -284,7 +292,11 @@ describe("recipes API", () => {
       payload: { ...baseRecipe, imageKeys: Array.from({ length: 9 }, () => `${"ab".repeat(16)}.jpg`) },
     });
     expect(tooMany.statusCode).toBe(400);
-    expect(tooMany.json().error).toBe("一道菜最多 8 张截图");
+    expect(tooMany.json()).toMatchObject({
+      error: zhError("images.too_many"),
+      code: "images.too_many",
+      fields: [{ field: "images", code: "images.too_many", message: zhError("images.too_many") }],
+    });
 
     const created = await app.inject({
       method: "POST",
@@ -375,5 +387,90 @@ describe("recipes API", () => {
     expect(fs.existsSync(path.join(dir, "objects", key))).toBe(false);
     const missing = await second.app.inject({ method: "GET", url: `/recipes/img/${key}` });
     expect(missing.statusCode).toBe(404);
+  });
+
+  it("serves the URL language and leaves the recipe text unchanged", async () => {
+    const { app } = await make({ dist: true });
+    const login = await app.inject({
+      method: "POST",
+      url: "/recipes/api/login",
+      payload: { username: "rende", password: "secret-secret" },
+    });
+    const cookie = cookiePair(login.headers["set-cookie"]);
+    expect(String(login.headers["set-cookie"])).toContain("Path=/recipes");
+    const title = "EXAMPLE · 番茄炒蛋 <raw>";
+    const created = await app.inject({
+      method: "POST",
+      url: "/recipes/api/recipes",
+      headers: { cookie },
+      payload: {
+        title,
+        douyinUrl: "https://v.douyin.com/iRk8aXc/",
+        ingredientLines: ["番茄 2 个", "egg 3"],
+        stepLines: ["炒到凝固", "Serve hot"],
+        imageKeys: [],
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json().id as number;
+    const readBack = await app.inject({ method: "GET", url: `/recipes/api/recipes/${id}` });
+    expect(readBack.json().title).toBe(title);
+    expect(readBack.json().ingredients).toEqual([
+      { name: "番茄", amount: "2 个" },
+      { name: "egg", amount: "3" },
+    ]);
+    expect(readBack.json().steps).toEqual(["炒到凝固", "Serve hot"]);
+
+    const zh = await app.inject({ method: "GET", url: `/recipes/${id}?lang=zh#cook` });
+    expect(zh.statusCode).toBe(200);
+    expect(zh.headers["cache-control"]).toBe("no-cache");
+    expect(zh.body).toContain('<html lang="zh-CN">');
+    expect(zh.body).toContain(`<title>${title.replaceAll("<", "&lt;").replaceAll(">", "&gt;")} · 家常菜本</title>`);
+    expect(zh.body).toContain('data-rf-enter');
+    expect(zh.body).toContain(`https://rende.fun/recipes/${id}`);
+    expect(zh.body).toContain(`https://rende.fun/recipes/en/${id}`);
+
+    const en = await app.inject({ method: "GET", url: `/recipes/en/${id}/` });
+    expect(en.statusCode).toBe(200);
+    expect(en.headers["cache-control"]).toBe("no-cache");
+    expect(String(en.headers["cache-control"])).not.toContain("immutable");
+    expect(en.body).toContain('<html lang="en">');
+    expect(en.body).not.toContain("data-rf-enter");
+    expect(en.body).toContain("<script>enter()</script>");
+    expect(en.body).toContain(`<title>${title.replaceAll("<", "&lt;").replaceAll(">", "&gt;")} · Home Recipes</title>`);
+    expect(en.body).toContain("Dishes I've cooked.");
+    expect(en.body).not.toContain("做过的菜");
+    expect(en.body).toContain(`href="https://rende.fun/recipes/en/${id}"`);
+
+    const bare = await app.inject({ method: "GET", url: "/recipes/en" });
+    expect(bare.statusCode).toBe(200);
+    expect(bare.body).toContain('<html lang="en">');
+    expect(bare.body).toContain("<title>Home Recipes · Recipes</title>");
+    const loginPage = await app.inject({ method: "GET", url: "/recipes/en/login" });
+    expect(loginPage.body).toContain("<title>Log in · Home Recipes</title>");
+    const editor = await app.inject({ method: "GET", url: "/recipes/en/new" });
+    expect(editor.body).toContain("<title>New recipe · Home Recipes</title>");
+    const edit = await app.inject({ method: "GET", url: `/recipes/${id}/edit` });
+    expect(edit.body).toContain('<html lang="zh-CN">');
+    expect(edit.body).toContain("<title>编辑菜谱 · 家常菜本</title>");
+
+    const updated = await app.inject({
+      method: "PUT",
+      url: `/recipes/api/recipes/${id}`,
+      headers: { cookie },
+      payload: {
+        title,
+        douyinUrl: "",
+        ingredientLines: ["番茄 2 个"],
+        stepLines: ["炒到凝固"],
+        imageKeys: [],
+      },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().title).toBe(title);
+    const removed = await app.inject({ method: "DELETE", url: `/recipes/api/recipes/${id}`, headers: { cookie } });
+    expect(removed.statusCode).toBe(204);
+    const gone = await app.inject({ method: "GET", url: `/recipes/en/${id}` });
+    expect(gone.body).toContain("<title>Page not found · Home Recipes</title>");
   });
 });

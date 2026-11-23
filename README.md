@@ -54,7 +54,9 @@ npm run build
 
 Environment variables are listed in `.env.example`.
 
-The site name lives only in `SITE_NAME` in `shared/site.ts`. The default is 家常菜本. The document title before JavaScript runs is that name plus 「 · 菜谱」 (with the default, 家常菜本 · 菜谱). The build writes it into `index.html` from `SITE_NAME`. Change `SITE_NAME`, then run `npm run build`, and both the browser title and the header update.
+The Chinese site name lives in `SITE_NAME` in `shared/site.ts`. The default is 家常菜本. The English name is `SITE_NAME_EN`, Home Recipes. Chinese pages stay at `/recipes`. English pages are `/recipes/en/`, `/recipes/en/12`, and the same shape for login and the editor. The build writes `client/dist/index.html` and `client/dist/en/index.html`. User-written dish names, ingredients, steps, links, and file names are not translated.
+
+The shared shell still has `recipes.en` set to false in the vendored `client/vendor/rf-lang.js` (rende-site `64701ced2b3e495f8e5237148096a5a665e41c17`). English pages on this site work from their URLs and from this site's language switch. The main-site menu keeps sending people to `/recipes/` until that flag is turned on, the new `/shell/lang.js` is published, and this vendored file is replaced and redeployed with it. See `docs/superpowers/specs/2026-11-23-recipes-i18n-design.md`.
 
 Screenshots go to Alibaba Cloud OSS through its S3-compatible API when all five of `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, and `S3_BUCKET` are set. If only some of them are set, the process exits. If all five are empty, files are stored in `DATA_DIR/objects`. Optional `S3_PREFIX` is prepended to the object key; the browser still requests `/recipes/img/<key>`. Access keys are never sent to the browser. `S3_ENDPOINT` is the regional endpoint without the bucket name, for example `https://oss-cn-hangzhou.aliyuncs.com`. An ECS instance in the same region can use the internal endpoint, for example `https://oss-cn-hangzhou-internal.aliyuncs.com`. Do not start `S3_PREFIX` with `/` or `\`, and do not change it after objects exist.
 
@@ -132,7 +134,9 @@ npm run build
 
 环境变量见 `.env.example`。
 
-站名只有 `shared/site.ts` 里的 `SITE_NAME`，默认「家常菜本」。JavaScript 执行前的文档标题是站名加上「 · 菜谱」（默认就是「家常菜本 · 菜谱」）。构建时按 `SITE_NAME` 写进 `index.html`。改完要重新 `npm run build`，浏览器里的标题和页头才会变。
+中文站名是 `shared/site.ts` 里的 `SITE_NAME`，默认「家常菜本」。英文站名是 `SITE_NAME_EN`，Home Recipes。中文页面仍在 `/recipes`。英文页面是 `/recipes/en/`、`/recipes/en/12`，登录和编辑也是同一形状。构建写出 `client/dist/index.html` 和 `client/dist/en/index.html`。用户写的菜名、食材、步骤、链接和文件名不翻译。
+
+当前内联的 `client/vendor/rf-lang.js`（rende-site `64701ced2b3e495f8e5237148096a5a665e41c17`）里 `recipes.en` 仍是 false。本站英文页可以由网址和本站切换器打开。主站菜单在这个标志改为 true、新的 `/shell/lang.js` 发布、并且这份内联文件被替换后重新部署之前，仍会指向 `/recipes/`。说明见 `docs/superpowers/specs/2026-11-23-recipes-i18n-design.md`。
 
 `S3_ENDPOINT`、`S3_REGION`、`S3_ACCESS_KEY_ID`、`S3_SECRET_ACCESS_KEY`、`S3_BUCKET` 五项都有值时，截图上传到阿里云 OSS（S3 兼容接口）。少一项，进程直接退出。五项都空着时，文件写在 `DATA_DIR/objects`。可选的 `S3_PREFIX` 会加在对象键前面，浏览器仍然只访问 `/recipes/img/<key>`。访问密钥不会发到浏览器。`S3_ENDPOINT` 填区域域名，不要带 Bucket，例如 `https://oss-cn-hangzhou.aliyuncs.com`。同地域的 ECS 可以用内网域名，例如 `https://oss-cn-hangzhou-internal.aliyuncs.com`。`S3_PREFIX` 不要以 `/` 或 `\` 开头，已有对象之后不要再改。
 
