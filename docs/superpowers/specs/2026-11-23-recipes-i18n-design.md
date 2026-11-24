@@ -2,7 +2,7 @@
 
 预览实现。不合并、不部署、不改生产、ESA、Nginx 或线上缓存。英文品牌是 Home Recipes。用户写入的菜名、食材、步骤、链接、图片和文件名原样保留，不自动翻译，不迁库。登录身份不变。
 
-共享运行时仍是契约 `v` 2。内联的 `client/vendor/rf-lang.js` 换成尚未合并的 [rende-site#7](https://github.com/rendeyuwei/rende-site/pull/7) `dd5cc90a05d99797f9a5191180f04162e24e4b4d` 的构建：`lang.js` 3755 字节，随包的 `topbar.js` 9923 字节。四个站的 `en` 在这份副本里是 true。那个 PR 还没合并，也不能把它当成已经发布的 `/shell/lang.js`。同版本的后加载副本不会覆盖先装入的内联文件。接入看 `choose` 是否存在，并派发 `rf:locale`，不判断 `v === 1`，也不另升版本。
+共享运行时仍是契约 `v` 2。内联的 `client/vendor/rf-lang.js` 仍是 `3effebca35bf58244e77657ead34de9f6afb4416ffdc3ba5a0bbcd4f2933c70d`，3755 字节，和 rende-site `fdaa701bbf2736ee2874cfe5456bd25d941145f6` 的 `lang.js` 逐字节相同。中文壳和英文壳的顶栏地址钉在 `/shell/topbar.4a304e017601ad56e80a5c39886c186fa462161ce585d093ae92c4cfc17edd7b.js`（9981 字节）。这份顶栏自己引用 `/shell/topbar.918f2c1a3eaa24581dfb11b360b323fa925b5a2548108b6ad5d8bd98ff3cc23b.css`（2807 字节）。页面地址不加版本，页面上也不显示版本。这个带哈希的地址还没当作已经发布；合并前由父端确认它返回 200 且校验和一致。同版本的后加载副本不会覆盖先装入的内联文件。接入看 `choose` 是否存在，并派发 `rf:locale`，不判断 `v === 1`，也不另升版本。
 
 ## 路径
 
@@ -30,7 +30,7 @@
 
 本站不重插 `topbar.js`，不写 `__rfBar`，不替换 `rfLang` 的方法，也不改已有链接的 href。没有定时器。没有 `choose` 时仍然切换路由。
 
-`scripts/shell-toggle-regression.mjs` 加载这次本地构建的 `/shell/topbar.js`，不是只跑内联的 `lang.js`。它检查至少四次切换、后退、前进和下一次打开 `/recipes/`。地址、页面语言、按钮、标题、hreflang、工具链接要一致，`rf-lang` 停在最后一次手选。未保存的菜名、食材、步骤、已上传图片和登录框留在内存，不整页刷新，不重复上传，也不写入本地存储。存储被禁用时仍能切到带 `lang=zh` 的地址。
+`scripts/shell-toggle-regression.mjs` 加载这次本地构建的带哈希顶栏，不是只跑内联的 `lang.js`。它检查至少四次切换、后退、前进和下一次打开 `/recipes/`。地址、页面语言、按钮、标题、hreflang、工具链接要一致，`rf-lang` 停在最后一次手选。未保存的菜名、食材、步骤、已上传图片和登录框留在内存，不整页刷新，不重复上传，也不写入本地存储。存储被禁用时仍能切到带 `lang=zh` 的地址。
 
 ## 文案与用户内容
 

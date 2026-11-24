@@ -20,5 +20,8 @@ it("declares both languages and skips analytics when the decision is leaving", (
   expect(html).toContain("window.rfLang && window.rfLang.leaving");
   const head = html.slice(html.indexOf("<head>"), html.indexOf("</head>"));
   expect(head.indexOf("data-rf-enter")).toBeLessThan(head.indexOf("hm.baidu.com"));
-  expect(html).toContain('<script src="/shell/topbar.js" defer data-tool="recipes"></script>');
+  expect(html).toContain(
+    '<script src="/shell/topbar.4a304e017601ad56e80a5c39886c186fa462161ce585d093ae92c4cfc17edd7b.js" defer data-tool="recipes"></script>',
+  );
+  expect(html).not.toContain('src="/shell/topbar.js"');
 });

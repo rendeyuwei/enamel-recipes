@@ -1,4 +1,4 @@
-// Real Chrome plus the local dd5cc90 shell (rfLang v2, en:true). Not part of npm test.
+// Real Chrome plus the local fdaa701 shell (rfLang v2, hashed topbar). Not part of npm test.
 // Serves dist/shell/topbar.js, not only the vendored lang.js. Needs Chrome and puppeteer-core.
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { hashPassword } from "../server/src/password.ts";
 
-const shellDir = process.env.RF_SHELL_DIR ?? "/tmp/rende-site-dd5cc90/dist/shell";
+const shellDir = process.env.RF_SHELL_DIR ?? "/tmp/rende-site-fdaa701/dist/shell";
 const port = Number(process.env.PORT ?? 3042);
 const origin = `http://127.0.0.1:${port}`;
 const root = "/tmp/recipes-shell-regression";
@@ -315,6 +315,69 @@ async function main() {
     }));
     if (loginFields.user !== loginName || loginFields.pass !== "not-sent") problem("login", "fields changed");
     if (loginPosts !== 0) problem("login", "form submitted");
+
+    const returning = await browser.newPage();
+    returning.setDefaultTimeout(12000);
+    await arm(returning);
+    await returning.goto(`${origin}/recipes/en/login?next=%2Frecipes%2Fen%2F12&q=1#form`, { waitUntil: "domcontentloaded" });
+    await returning.waitForSelector("#username");
+    await returning.type("#username", "preview-user");
+    await returning.type("#password", "not-sent");
+    await returning.click("a.rf-lang");
+    await returning.waitForFunction(() => location.pathname === "/recipes/login");
+    await delay(200);
+    const returned = await returning.evaluate(() => ({
+      url: location.pathname + location.search + location.hash,
+      user: document.querySelector("#username") instanceof HTMLInputElement ? document.querySelector("#username").value : "",
+      pass: document.querySelector("#password") instanceof HTMLInputElement ? document.querySelector("#password").value : "",
+      focus: document.activeElement instanceof HTMLAnchorElement ? document.activeElement.className : "",
+    }));
+    if (returned.url !== "/recipes/login?next=%2Frecipes%2Fen%2F12&q=1&lang=zh#form") problem("next", returned.url);
+    if (returned.user !== "preview-user" || returned.pass !== "not-sent") problem("next", "fields changed");
+    if (returned.focus !== "rf-lang") problem("focus", returned.focus);
+
+    const invalid = await browser.newPage();
+    invalid.setDefaultTimeout(12000);
+    await arm(invalid);
+    await invalid.goto(`${origin}/recipes/en/new?q=1#draft`, { waitUntil: "domcontentloaded" });
+    await invalid.waitForSelector("#title");
+    await invalid.click("button.btn.fill");
+    await invalid.waitForSelector(".err");
+    const englishError = await invalid.evaluate(() => document.querySelector(".err")?.textContent ?? "");
+    if (englishError !== "Enter a dish name.") problem("error", englishError);
+    await invalid.click("a.rf-lang");
+    await invalid.waitForFunction(() => location.pathname === "/recipes/new");
+    await delay(200);
+    const chineseError = await invalid.evaluate(() => ({
+      url: location.pathname + location.search + location.hash,
+      error: document.querySelector(".err")?.textContent ?? "",
+      title: document.querySelector("#title") instanceof HTMLInputElement ? document.querySelector("#title").value : "missing",
+      loads: performance.getEntriesByType("navigation").length,
+    }));
+    if (chineseError.url !== "/recipes/new?q=1&lang=zh#draft") problem("error", chineseError.url);
+    if (chineseError.error !== "请填写菜名" || chineseError.title !== "") problem("error", `${chineseError.error} ${chineseError.title}`);
+    if (chineseError.loads !== 1) problem("error", "reloaded");
+
+    for (const width of [320, 390]) {
+      const narrow = await browser.newPage();
+      narrow.setDefaultTimeout(12000);
+      await narrow.setViewport({ width, height: 700, isMobile: true, hasTouch: true });
+      await arm(narrow);
+      await narrow.goto(`${origin}/recipes/en/?q=1#h`, { waitUntil: "domcontentloaded" });
+      await narrow.waitForSelector("a.rf-lang");
+      await narrow.click("a.rf-lang");
+      await narrow.waitForFunction(() => location.pathname === "/recipes/");
+      await delay(200);
+      const fitted = await narrow.evaluate(() => ({
+        url: location.pathname + location.search + location.hash,
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        names: [...document.querySelectorAll(".rf-n")].map((node) => node.textContent).join("|"),
+      }));
+      if (fitted.url !== "/recipes/?q=1&lang=zh#h") problem(`mobile-${width}`, fitted.url);
+      if (fitted.overflow > 1) problem(`mobile-${width}`, `overflow ${fitted.overflow}`);
+      if (!fitted.names.includes("家常菜本")) problem(`mobile-${width}`, fitted.names);
+      await narrow.close();
+    }
 
     const blocked = await browser.newPage();
     blocked.setDefaultTimeout(12000);

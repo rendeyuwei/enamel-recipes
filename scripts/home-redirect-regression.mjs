@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { hashPassword } from "../server/src/password.ts";
 
-const shellDir = process.env.RF_SHELL_DIR ?? "/tmp/rende-site-dd5cc90/dist/shell";
+const shellDir = process.env.RF_SHELL_DIR ?? "/tmp/rende-site-fdaa701/dist/shell";
 const appPort = Number(process.env.PORT ?? 3045);
 const proxyPort = appPort + 1;
 const origin = `http://127.0.0.1:${proxyPort}`;
@@ -26,8 +26,9 @@ const envFile = [
 ].join("\n");
 writeFileSync(join(root, "env"), envFile, { mode: 0o600 });
 
-if (statSync(join(shellDir, "lang.js")).size !== 3755 || statSync(join(shellDir, "topbar.js")).size !== 9923) {
-  throw new Error("shell is not the 3755/9923 build");
+const pinnedTopbar = "topbar.4a304e017601ad56e80a5c39886c186fa462161ce585d093ae92c4cfc17edd7b.js";
+if (statSync(join(shellDir, "lang.js")).size !== 3755 || statSync(join(shellDir, pinnedTopbar)).size !== 9981) {
+  throw new Error("shell is not the pinned 3755/9981 build");
 }
 
 const puppeteer = await import(process.env.PUPPETEER_CORE ?? "/tmp/preview-tools/node_modules/puppeteer-core/lib/esm/puppeteer/puppeteer-core.js");
