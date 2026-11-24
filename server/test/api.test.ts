@@ -447,7 +447,12 @@ describe("recipes API", () => {
     expect(bare.body).toContain('<html lang="en">');
     expect(bare.body).toContain("<title>Home Recipes · Recipes</title>");
     const loginPage = await app.inject({ method: "GET", url: "/recipes/en/login" });
+    expect(loginPage.headers["cache-control"]).toBe("no-cache");
     expect(loginPage.body).toContain("<title>Log in · Home Recipes</title>");
+    const fallback = await app.inject({ method: "GET", url: "/recipes/no-such-page?q=1#h" });
+    expect(fallback.statusCode).toBe(200);
+    expect(fallback.headers["cache-control"]).toBe("no-cache");
+    expect(fallback.body).toContain('<div id="root"></div>');
     const editor = await app.inject({ method: "GET", url: "/recipes/en/new" });
     expect(editor.body).toContain("<title>New recipe · Home Recipes</title>");
     const edit = await app.inject({ method: "GET", url: `/recipes/${id}/edit` });
